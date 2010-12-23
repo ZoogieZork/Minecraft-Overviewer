@@ -65,8 +65,8 @@
     var a = location.href.substring(0, location.href.lastIndexOf("/") + 1) +
       "?lat=" + map.getCenter().lat().toFixed(6) +
       "&lng=" + map.getCenter().lng().toFixed(6) +
-      "&zoom=" + map.getZoom();
-    //TODO: Night/day.
+      "&zoom=" + map.getZoom() +
+      "&type=" + map.getMapTypeId().substring(6);
     var linkElem = document.getElementById("link");
     linkElem.href = a;
     linkElem.innerHTML = a;
@@ -267,13 +267,14 @@ google.maps.event.addListener(marker, 'click', function() {
     var lat = 0.5;
     var lng = 0.5;
     var zoom = config.defaultZoom;
+    var mapType = 'day';
 
     for (var i = 0; i < pairs.length; ++i) {
       var param = pairs[i].split("=");
       if (param[0] == "zoom") zoom = parseInt(param[1]);
       else if (param[0] == "lat") lat = parseFloat(param[1]);
       else if (param[0] == "lng") lng = parseFloat(param[1]);
-      //TODO: Night/day
+      else if (param[0] == "type") mapType = param[1];
     }
 
     var mapOptions = {
@@ -285,8 +286,7 @@ google.maps.event.addListener(marker, 'click', function() {
       streetViewControl: false,
       mapTypeControlOptions: {
         mapTypeIds: ['mcmap-day', 'mcmap-night'],
-      }//,
-      //mapTypeId: 'mcmap-day'
+      }
     };
     map = new google.maps.Map(document.getElementById("mcmap"), mapOptions);
     
@@ -310,7 +310,7 @@ google.maps.event.addListener(marker, 'click', function() {
     map.mapTypes.set('mcmap-night', MCMapTypeNight);
   
     // We can now set the map to use the 'coordinate' map type
-    map.setMapTypeId('mcmap-day');
+    map.setMapTypeId('mcmap-' + mapType);
 	
 	// initialize the markers and regions
 	  initMarkers();
@@ -329,6 +329,7 @@ google.maps.event.addListener(marker, 'click', function() {
     makeLink(map);
     var linkCb = function() { makeLink(map); };
     google.maps.event.addListener(map, "zoom_changed", linkCb);
+    google.maps.event.addListener(map, "maptypeid_changed", linkCb);
     google.maps.event.addListener(map, "center_changed", linkCb);
 
   }
