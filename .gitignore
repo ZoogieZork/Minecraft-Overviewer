@@ -17,5 +17,5 @@ _composite.dylib
 .DS_Store
 
 #Script files, as users may want their own scripts.
-*.sh
-*.bat
+/*.sh
+/*.bat
