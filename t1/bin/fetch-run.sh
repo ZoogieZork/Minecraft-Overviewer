@@ -34,6 +34,10 @@ if wget -t 3 --progress=dot:mega -O world.7z "$WORLD_URL"; then
 	pushd "$WORLD_DIR"
 	"$OVERVIEWER_ROOT/t1/bin/markers.rb"
 	popd
+
+	SNAPSHOT_TIME="$(stat world.7z | grep '^Modify:' | cut -d ' ' -f 2-)"
+	echo "var worldSnapshotTs='$(date -d "$SNAPSHOT_TIME")'" > \
+		"$WORLD_MTIME_FILENAME"
 else
     echo ''
 	echo "Failed to retrieve: $WORLD_URL"
