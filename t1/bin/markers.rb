@@ -15,9 +15,11 @@ print "Total markers: #{js["markers"].length}\n"
 
 filtered = []
 js["markers"].each do |mark|
-	msg = mark["msg"]
+	if mark['type'] == 'sign'
+		msg = mark["msg"]
 
-	next if msg =~ /\A\s*\Z/
+		next if msg =~ /\A\s*\Z/
+	end
 
 	filtered.push mark
 end
