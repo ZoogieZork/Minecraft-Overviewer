@@ -29,6 +29,11 @@ if wget -t 3 --progress=dot:mega -O world.7z "$WORLD_URL"; then
 	echo "--> Rendering night"
 	t1/bin/run-night.sh
 	popd
+
+	echo "==> Filtering markers"
+	pushd "$WORLD_DIR"
+	"$OVERVIEWER_ROOT/t1/bin/markers.rb"
+	popd
 else
     echo ''
 	echo "Failed to retrieve: $WORLD_URL"
