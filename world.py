@@ -222,7 +222,8 @@ class WorldRenderer(object):
         ## find the first air block
         while (blockArray[inChunkX, inChunkZ, spawnY] != 0):
             spawnY += 1
-
+            if spawnY == 128:
+                break
 
         self.POI.append( dict(x=spawnX, y=spawnY, z=spawnZ, 
                 msg="Spawn", type="spawn", chunk=(inChunkX,inChunkZ)))
@@ -394,7 +395,9 @@ def get_worlds():
     for dir in os.listdir(save_dir):
         if dir.startswith("World") and len(dir) == 6:
             world_n = int(dir[-1])
-            info = nbt.load(os.path.join(save_dir, dir, "level.dat"))[1]
+            world_dat = os.path.join(save_dir, dir, "level.dat")
+            if not os.path.exists(world_dat): continue
+            info = nbt.load(world_dat)[1]
             info['Data']['path'] = os.path.join(save_dir, dir)
             ret[world_n] = info['Data']
 
