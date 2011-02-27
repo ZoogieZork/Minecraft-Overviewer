@@ -281,7 +281,7 @@ def _build_blockimages():
        #       32  33  34  35  36  37  38  39  40  41  42  43  44  45  46  47
                -1, -1, -1, -1, -1, 13, 12, 29, 28, 23, 22,  6,  6,  7,  8, 35, # Gold/iron blocks? Doublestep? TNT from above?
        #       48  49  50  51  52  53  54  55  56  57  58  59  60  61  62  63
-               36, 37, 80, -1, 65,  4, 25,101, 98, 24, 43, -1, 86, -1, -1, -1, # Torch from above? leaving out fire. Redstone wire? Crops/furnaces handled elsewhere. sign post
+               36, 37, 80, -1, 65,  4, 25, -1, 98, 24, 43, -1, 86, -1, -1, -1, # Torch from above? leaving out fire. Redstone wire? Crops/furnaces handled elsewhere. sign post
        #       64  65  66  67  68  69  70  71  72  73  74  75  76  77  78  79
                -1, -1, -1, 16, -1, -1, -1, -1, -1, 51, 51, -1, -1,  1, 66, 67, # door,ladder left out. Minecart rail orientation
        #       80  81  82  83  84  85  86  87  88  89  90  91
@@ -761,115 +761,21 @@ def generate_special_texture(blockID, data):
         # +y axis points bottom right direction
         # First compose small sticks in the back of the image, 
         # then big stick and thecn small sticks in the front.
-        if data == 1:
-            img = fence_big
-            return (img.convert("RGB"),img.split()[3])
-           
-        elif data == 2: #fence in line with x axis
+
+        if (data & 0b0001) == 1:
+            composite.alpha_over(img,fence_small_side, pos_top_left,fence_small_side)                # top left
+        if (data & 0b1000) == 8:
             composite.alpha_over(img,fence_small_other_side, pos_top_right,fence_small_other_side)    # top right
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_other_side, pos_bottom_left,fence_small_other_side)      # bottom left
-            return (img.convert("RGB"),img.split()[3])
             
-        elif data == 3: #fence in line with y axis
-            composite.alpha_over(img,fence_small_side, pos_top_left,fence_small_side)                # top left
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_side, pos_bottom_right,fence_small_side)                  # bottom right
-            return (img.convert("RGB"),img.split()[3])
-
-
-        elif data == 4: #fence corner +x, -y
-            composite.alpha_over(img,fence_small_other_side, pos_top_right,fence_small_other_side)    # top right
-            composite.alpha_over(img,fence_small_side, pos_top_left,fence_small_side)                # top left
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            return (img.convert("RGB"),img.split()[3])
-
-        elif data == 5: #fence corner -x, -y
-            composite.alpha_over(img,fence_small_side, pos_top_left,fence_small_side)                # top left
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_other_side, pos_bottom_left,fence_small_other_side)      # bottom left
-            return (img.convert("RGB"),img.split()[3])
-
-        elif data == 6: #fence corner -x, +y
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_side, pos_bottom_right,fence_small_side)                  # bottom right
-            composite.alpha_over(img,fence_small_other_side, pos_bottom_left,fence_small_other_side)      # bottom left
-            return (img.convert("RGB"),img.split()[3])
+        composite.alpha_over(img,fence_big,(0,0),fence_big)
             
-        elif data == 7: #fence corner +x, +y
-            composite.alpha_over(img,fence_small_other_side, pos_top_right,fence_small_other_side)    # top right
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_side, pos_bottom_right,fence_small_side)                  # bottom right
-            return (img.convert("RGB"),img.split()[3])
-
-            
-        elif data == 8: #fence dead end +x
-            composite.alpha_over(img,fence_small_other_side, pos_top_right,fence_small_other_side)    # top right
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            return (img.convert("RGB"),img.split()[3])
-
-        elif data == 9: #fence dead end -y
-            composite.alpha_over(img,fence_small_side, pos_top_left,fence_small_side)                # top left
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            return (img.convert("RGB"),img.split()[3])
-
-        elif data == 10: #fence dead end -x
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_other_side, pos_bottom_left,fence_small_other_side)      # bottom left
-            return (img.convert("RGB"),img.split()[3])
-
-        elif data == 11: #fence dead end +y
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_side, pos_bottom_right,fence_small_side)                  # bottom right
-            return (img.convert("RGB"),img.split()[3])
-
-
-        elif data == 12: #fence cross with +y missing
-            composite.alpha_over(img,fence_small_side, pos_top_left,fence_small_side)                # top left
-            composite.alpha_over(img,fence_small_other_side, pos_top_right,fence_small_other_side)    # top right
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_other_side, pos_bottom_left,fence_small_other_side)      # bottom left            
-            return (img.convert("RGB"),img.split()[3])
-
-        elif data == 13: #fence cross with +x missing
-            composite.alpha_over(img,fence_small_side, pos_top_left,fence_small_side)                # top left
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
+        if (data & 0b0010) == 2:
             composite.alpha_over(img,fence_small_other_side, pos_bottom_left,fence_small_other_side)      # bottom left    
+        if (data & 0b0100) == 4:
             composite.alpha_over(img,fence_small_side, pos_bottom_right,fence_small_side)                  # bottom right
-            return (img.convert("RGB"),img.split()[3])
-
-        elif data == 14: #fence cross with -y missing
-            composite.alpha_over(img,fence_small_other_side, pos_top_right,fence_small_other_side)    # top right
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_other_side, pos_bottom_left,fence_small_other_side)      # bottom left
-            composite.alpha_over(img,fence_small_side, pos_bottom_right,fence_small_side)                  # bottom right
-            return (img.convert("RGB"),img.split()[3])
-
-        elif data == 15: #fence cross with -x missing
-            composite.alpha_over(img,fence_small_side, pos_top_left,fence_small_side)                # top left
-            composite.alpha_over(img,fence_small_other_side, pos_top_right,fence_small_other_side)    # top right
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_side, pos_bottom_right,fence_small_side)                  # bottom right
-            return (img.convert("RGB"),img.split()[3])
-
-
-        elif data == 16: #fence cross
-            composite.alpha_over(img,fence_small_side, pos_top_left,fence_small_side)                # top left
-            composite.alpha_over(img,fence_small_other_side, pos_top_right,fence_small_other_side)    # top right
-            composite.alpha_over(img,fence_big,(0,0),fence_big)
-            composite.alpha_over(img,fence_small_other_side, pos_bottom_left,fence_small_other_side)      # bottom left    
-            composite.alpha_over(img,fence_small_side, pos_bottom_right,fence_small_side)                  # bottom right
-            return (img.convert("RGB"),img.split()[3])
             
-        elif data == None: # This can happend if a fence is in the border
-                # of a chunk and the chunk is in the border of the map.
-            composite.alpha_over(img,fence_big,(0,0),)
-            return (img.convert("RGB"), img.split()[3])
-            
-        else: # just in case
-            composite.alpha_over(img,fence_big,(0,0),)
-            return (img.convert("RGB"), img.split()[3])
-            
+        return (img.convert("RGB"),img.split()[3])
+
 
     return None
 
