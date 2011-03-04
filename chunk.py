@@ -150,10 +150,15 @@ def check_cache(world, chunkXY, oldimg):
 # TODO currently, just use the mtime on the region file
 # TODO (which will cause a single chunk update to invalidate everything in the region
 
-    chunkfile = os.path.join(world.worlddir, "region", "r.%d.%d.mcr" % (chunkXY[0]%64, chunkXY[1]%64))
-    #logging.debug("checking cache  %s against %s", chunkfile, oldimg[1])
+    if not oldimg[1]: return False
+    chunkfile = os.path.join(world.worlddir, "region", "r.%d.%d.mcr" % (chunkXY[0]//32, chunkXY[1]//32))
+
+    with open(chunkfile, "rb") as f:
+        region = nbt.MCRFileReader(f)
+        mtime = region.get_chunk_timestamp(chunkXY[0], chunkXY[1])
+    #logging.debug("checking cache  %s against %s %d", chunkfile, oldimg[1], mtime)
     try:
-        if oldimg[1] and os.path.getmtime(chunkfile) <= os.path.getmtime(oldimg[1]):
+        if mtime <= os.path.getmtime(oldimg[1]):
             return True
         return False
     except OSError:
@@ -366,7 +371,7 @@ class ChunkRenderer(object):
             self._up_right_skylight = get_skylight_array(chunk_data)
             self._up_right_blocklight = get_blocklight_array(chunk_data)
             self._up_right_blocks = get_blockarray(chunk_data)
-        except IOError:
+        except NoSuchChunk:
             self._up_right_skylight = None
             self._up_right_blocklight = None
             self._up_right_blocks = None
@@ -386,7 +391,7 @@ class ChunkRenderer(object):
             self._up_left_skylight = get_skylight_array(chunk_data)
             self._up_left_blocklight = get_blocklight_array(chunk_data)
             self._up_left_blocks = get_blockarray(chunk_data)
-        except IOError:
+        except NoSuchChunk:
             self._up_left_skylight = None
             self._up_left_blocklight = None
             self._up_left_blocks = None
@@ -500,7 +505,6 @@ class ChunkRenderer(object):
         except NoSuchChunk, e:
             return None
 
-        
         dest_path = os.path.join(self.cachedir, dest_filename)
         #logging.debug("cache filename: %s", dest_path)
 
@@ -510,9 +514,9 @@ class ChunkRenderer(object):
                 # hashes match.
                 # Before we return it, update its mtime so the next round
                 # doesn't have to check the hash
-                # TODO fix up hash checking
+                # TODO confirm hash checking is correct (it should be)
                 os.utime(dest_path, None)
-                logging.debug("Using cached image")
+                logging.debug("Using cached image, and updating utime")
                 return dest_path
             else:
                 # Remove old image for this chunk. Anything already existing is
@@ -520,6 +524,7 @@ class ChunkRenderer(object):
                 os.unlink(self.oldimg_path)
 
 
+        logging.debug("doing a real real render")    
         # Render the chunk
         img = self.chunk_render(cave=cave)
         # Save it
@@ -670,9 +675,9 @@ class ChunkRenderer(object):
         if self.world.useBiomeData:
             biomeColorData = textures.getBiomeData(self.world.worlddir,
                 self.chunkX, self.chunkY)
-        # in the 8x8 block of biome data, what chunk is this?l
-        startX = (self.chunkX - int(math.floor(self.chunkX/8)*8))
-        startY = (self.chunkY - int(math.floor(self.chunkY/8)*8))
+        # in the 32x32 block of biome data, what chunk is this?l
+        startX = self.chunkX % 32
+        startY = self.chunkY % 32
 
         # Each block is 24x24
         # The next block on the X axis adds 12px to x and subtracts 6px from y in the image
@@ -712,14 +717,17 @@ class ChunkRenderer(object):
                 continue
             
             if self.world.useBiomeData:
+                # 16 : number of blocks in a chunk (in one direction)
+                # 32 : number of chunks in a region (and biome file) in one direction
+                # so 16 * 32 == 512 : number of blocks in biome file, in one direction
                 if blockid == 2: #grass
-                    index = biomeColorData[ ((startY*16)+y) * 128 + (startX*16) + x]
+                    index = biomeColorData[ ((startY*16)+y) * 512 + (startX*16) + x]
                     c = textures.grasscolor[index]
 
                     # only tint the top texture
                     t = textures.prepareGrassTexture(c)
                 elif blockid == 18: # leaves
-                    index = biomeColorData[ ((startY*16)+y) * 128 + (startX*16) + x]
+                    index = biomeColorData[ ((startY*16)+y) * 512 + (startX*16) + x]
                     c = textures.foliagecolor[index]
                     
                     t = textures.prepareLeafTexture(c)
