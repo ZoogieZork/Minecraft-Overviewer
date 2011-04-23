@@ -1,7 +1,6 @@
 #!/bin/sh
 
 WORK_DIR="$HOME/minecraft"
-WORLD_URL='http://example.org/world.7z'
 WWW_DIR=/var/www/example.org/minecraft
 
 OVERVIEWER_ROOT="$WORK_DIR/bin"
