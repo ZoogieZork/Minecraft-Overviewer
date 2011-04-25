@@ -11,7 +11,7 @@ cd "$WORK_DIR"
 WORLD_MTIME_FILENAME="$WORLD_DIR/world-mtime.js"
 
 echo "==> Updating world"
-if ( cd world ; git pull ); then
+if ( cd world ; git checkout session.lock ; git pull ); then
 
 	echo "==> Extracting biomes"
 	java -jar MinecraftBiomeExtractor.jar -nogui world
