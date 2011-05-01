@@ -21,7 +21,7 @@ if ( cd world ; git checkout session.lock ; git pull ); then
 
 	echo "==> Rendering"
 	pushd "$OVERVIEWER_ROOT"
-	#t1/bin/run.sh
+	t1/bin/run.sh
 	popd
 
 	echo "==> Filtering markers"
