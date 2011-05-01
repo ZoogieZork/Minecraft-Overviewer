@@ -10,6 +10,9 @@ cd "$WORK_DIR"
 
 WORLD_MTIME_FILENAME="$WORLD_DIR/world-mtime.js"
 
+# Disable paging by git.
+export GIT_PAGER=cat
+
 echo "==> Updating world"
 if ( cd world ; git checkout session.lock ; git pull ); then
 
@@ -18,7 +21,7 @@ if ( cd world ; git checkout session.lock ; git pull ); then
 
 	echo "==> Rendering"
 	pushd "$OVERVIEWER_ROOT"
-	t1/bin/run.sh
+	#t1/bin/run.sh
 	popd
 
 	echo "==> Filtering markers"
@@ -26,10 +29,9 @@ if ( cd world ; git checkout session.lock ; git pull ); then
 	"$OVERVIEWER_ROOT/t1/bin/markers.rb"
 	popd
 
-    #FIXME: Update for git
-	#SNAPSHOT_TIME="$(stat world.7z | grep '^Modify:' | cut -d ' ' -f 2-)"
-	#echo "var worldSnapshotTs='$(date -d "$SNAPSHOT_TIME")'" > \
-	#	"$WORLD_MTIME_FILENAME"
+	SNAPSHOT_TIME="$(cd world ; git log -1 --format='%ad')"
+	echo "var worldSnapshotTs='$SNAPSHOT_TIME'" > \
+		"$WORLD_MTIME_FILENAME"
 else
     echo ''
 	echo "Failed to retrieve: $WORLD_URL"
