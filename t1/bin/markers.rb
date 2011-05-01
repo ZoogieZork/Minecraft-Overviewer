@@ -9,7 +9,8 @@ require 'rubygems'
 require 'json'
 
 text = File.read 'markers.js'
-js = JSON.parse(text.gsub(/^[^=]*=/, '{"markers":') + '}')
+text = text.gsub(/^[^(]*\(/, '{"markers":').gsub(/\);$/, '}')
+js = JSON.parse(text)
 
 print "Total markers: #{js["markers"].length}\n"
 
@@ -27,8 +28,8 @@ end
 print "After filtering: #{filtered.length}\n"
 
 File.open 'markers-filtered.js', 'w' do |file|
-	file.write 'var markerData='
+	file.write 'overviewer.collections.markerDatas.push('
 	file.write filtered.to_json
-	file.write "\n"
+	file.write ");\n"
 end
 
