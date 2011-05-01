@@ -8,9 +8,7 @@ source "$OVERVIEWER_CFG"
 
 cd "$OVERVIEWER_ROOT"
 
-time nice -n 19 python gmap.py \
+time nice -n 19 python overviewer.py \
     -p 2 \
-    --lighting \
-    --cachedir="$WORLD-cache" \
     "$WORLD" \
     "$WORLD_DIR"
