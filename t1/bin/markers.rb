@@ -19,7 +19,8 @@ js["markers"].each do |mark|
 	if mark['type'] == 'sign'
 		msg = mark["msg"]
 
-		next if msg =~ /\A\s*\Z/
+		next if msg =~ /\A\s*\Z/ ||
+			msg =~ /\Aarmrest \n \n \n\Z/
 	end
 
 	filtered.push mark
