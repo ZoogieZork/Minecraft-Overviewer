@@ -350,7 +350,7 @@ def _build_blockimages():
        #       32  33  34  35  36  37  38  39  40  41  42  43  44  45  46  47
                -1, -1, -1, -1, -1, 13, 12, 29, 28, 23, 22, -1, -1,  7,  8,  4, # Gold/iron blocks? Doublestep? TNT from above?
        #       48  49  50  51  52  53  54  55  56  57  58  59  60  61  62  63
-               36, 37, -1, -1, 65, -1, -1, -1, 98, 24, -1, -1, 86, -1, -1, -1, # Torch from above? leaving out fire. Redstone wire? Crops/furnaces handled elsewhere. sign post
+               36, 37, -1, -1, 65, -1, -1, -1, 50, 24, -1, -1, 86, -1, -1, -1, # Torch from above? leaving out fire. Redstone wire? Crops/furnaces handled elsewhere. sign post
        #       64  65  66  67  68  69  70  71  72  73  74  75  76  77  78  79
                -1, -1, -1, -1, -1, -1, -1, -1, -1, 51, 51, -1, -1, -1, 66, 67, # door,ladder left out. Minecart rail orientation, redstone torches
        #       80  81  82  83  84  85  86  87  88  89  90  91
@@ -367,7 +367,7 @@ def _build_blockimages():
        #        32  33  34  35  36  37  38  39  40  41  42  43  44  45  46  47
                 -1, -1, -1, -1, -1, 13, 12, 29, 28, 23, 22, -1, -1,  7,  8, 35,
        #        48  49  50  51  52  53  54  55  56  57  58  59  60  61  62  63
-                36, 37, -1, -1, 65, -1, -1,101, 98, 24, -1, -1, 86, -1, -1, -1,
+                36, 37, -1, -1, 65, -1, -1,101, 50, 24, -1, -1, 86, -1, -1, -1,
        #        64  65  66  67  68  69  70  71  72  73  74  75  76  77  78  79
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, 51, 51, -1, -1, -1, 66, 67,
        #        80  81  82  83  84  85  86  87  88  89  90  91
@@ -429,9 +429,14 @@ def generate_special_texture(blockID, data):
     # all need to behandled here (and in chunkpy)
     
     if blockID == 2: # grass
-        img = _build_block(terrain_images[0], terrain_images[3], 2)
-        colored = tintTexture(biome_grass_texture, (115, 175, 71))
-        composite.alpha_over(img, colored, (0, 0), colored)
+        # data & 0x10 means SNOW sides
+        side_img = terrain_images[3]
+        if data & 0x10:
+            side_img = terrain_images[68]
+        img = _build_block(terrain_images[0], side_img, 2)
+        if not data & 0x10:
+            colored = tintTexture(biome_grass_texture, (115, 175, 71))
+            composite.alpha_over(img, colored, (0, 0), colored)
         return (img.convert("RGB"), img.split()[3])
 
 
@@ -1327,10 +1332,11 @@ special_map[92] = range(6) # cake!
 # grass and leaves are graysacle in terrain.png
 # we treat them as special so we can manually tint them
 # it is unknown how the specific tint (biomes) is calculated
-special_map[2] = range(11)       # grass, grass has not ancildata but is used
-                                # in the mod WildGrass, and this small fix
-                                # shows the map as expected, and is harmless
-                                # for normal maps
+# also, 0x10 means SNOW sides
+special_map[2] = range(11) + [0x10,]  # grass, grass has not ancildata but is
+                                      # used in the mod WildGrass, and this
+                                      # small fix shows the map as expected,
+                                      # and is harmless for normal maps
 special_map[18] = range(16) # leaves, birch, normal or pine leaves (not implemented)
 
 
