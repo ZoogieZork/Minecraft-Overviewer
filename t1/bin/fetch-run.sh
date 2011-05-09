@@ -16,6 +16,14 @@ export GIT_PAGER=cat
 echo "==> Updating world"
 if ( cd world ; git checkout session.lock ; git pull ); then
 
+    echo "==> Compacting repository"
+    echo -n "--> Before: "
+    du -h --max-depth=0 world/.git
+    echo "--> Compacting"
+    ( cd world ; git gc )
+    echo -n "--> After:  "
+    du -h --max-depth=0 world/.git
+
 	echo "==> Extracting biomes"
 	java -jar MinecraftBiomeExtractor.jar -nogui world
 
