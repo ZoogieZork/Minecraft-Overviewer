@@ -10,5 +10,6 @@ cd "$OVERVIEWER_ROOT"
 
 time nice -n 19 python overviewer.py \
     -p 2 \
+    --settings=settings.py \
     "$WORLD" \
     "$WORLD_DIR"
