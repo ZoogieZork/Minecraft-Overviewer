@@ -58,7 +58,6 @@ var overviewer = {
             overviewer.util.initializeMarkers();
             overviewer.util.initializeRegions();
             overviewer.util.createMapControls();
-            overviewer.util.createSearchBox();
         },
         /**
          * This adds some methods to these classes because Javascript is stupid
@@ -166,6 +165,9 @@ var overviewer = {
             var zoom = overviewerConfig.map.defaultZoom;
             var mapcenter;
             var queryParams = overviewer.util.parseQueryString();
+            if (queryParams.debug) {
+                overviewerConfig.map.debug=true;
+            }
             if (queryParams.lat) {
                 lat = parseFloat(queryParams.lat);
             }
@@ -392,58 +394,75 @@ var overviewer = {
                             point.x, point.y, point.z));
 
                     }
+                    
+                    if (region.label) {
+                        var name = region.label;
+                    } else {
+                        var name = "rawr";
+                    }
+                    
+                    if(region.opacity) {
+                        var strokeOpacity = region.opacity;
+                        var fillOpacity = region.opacity * 0.25;
+                    } else {
+                        var strokeOpacity = region.strokeOpacity;
+                        var fillOpacity = region.fillOpacity;
+                    }
+                    
+                    var shapeOptions = {
+                            'name':             name,
+                            'geodesic':         false,
+                            'map':              null,
+                            'strokeColor':      region.color,
+                            'strokeOpacity':    strokeOpacity,
+                            'strokeWeight':     overviewerConfig.CONST.regionStrokeWeight,
+                            'zIndex':           j
+                    };
+                    if (region.closed) {
+                        shapeOptions["fillColor"] = region.color;
+                        shapeOptions["fillOpacity"] = fillOpacity;
+                        shapeOptions["paths"] = converted;
+                    } else {
+                        shapeOptions["path"] = converted;
+                    }
+
+                    var matched = false;
+
                     for (k in overviewerConfig.objectGroups.regions) {
                         var regionGroup = overviewerConfig.objectGroups.regions[k];
                         var clickable = regionGroup.clickable;
                         var label = regionGroup.label;
-
-                        if(region.label) {
-                            var name = region.label
-                        } else {
-                            var name = 'rawr';
+                        
+                        if (!regionGroup.match(region))
+                            continue;
+                        matched = true;
+                        
+                        if (!region.label) {
                             clickable = false; // if it doesn't have a name, we dont have to show it.
                         }
 
-                        if(region.opacity) {
-                            var strokeOpacity = region.opacity;
-                            var fillOpacity = region.opacity * 0.25;
+                        if (region.closed) {
+                            var shape = new google.maps.Polygon(shapeOptions);
                         } else {
-                            var strokeOpacity = region.strokeOpacity;
-                            var fillOpacity = region.fillOpacity;
+                            var shape = new google.maps.Polyline(shapeOptions);
                         }
 
-                        if (region.closed) {
-                            var shape = new google.maps.Polygon({
-                                'name': name,
-                                'clickable':        clickable,
-                                'geodesic':         false,
-                                'map':              null,
-                                'strokeColor':      region.color,
-                                'strokeOpacity':    strokeOpacity,
-                                'strokeWeight':     overviewerConfig.CONST.regionStrokeWeight,
-                                'fillColor':        region.color,
-                                'fillOpacity':      fillOpacity,
-                                'zIndex':           j,
-                                'paths':            converted
-                            });
-                        } else {
-                            var shape = new google.maps.Polyline({
-                                    'name':             name,
-                                    'clickable':        clickable,
-                                    'geodesic':         false,
-                                    'map':              null,
-                                    'strokeColor':      region.color,
-                                    'strokeOpacity':    strokeOpacity,
-                                    'strokeWeight':     overviewerConfig.CONST.regionStrokeWeight,
-                                    'zIndex':           j,
-                                    'path':             converted
-                                });
-                        }
                         overviewer.collections.regions[label].push(shape); 
 
                         if (clickable) {
                             overviewer.util.createRegionInfoWindow(shape);
                         }
+                    }
+                    
+                    // if we haven't matched anything, go ahead and add it
+                    if (!matched) {
+                        if (region.closed) {
+                            var shape = new google.maps.Polygon(shapeOptions);
+                        } else {
+                            var shape = new google.maps.Polyline(shapeOptions);
+                        }
+                        
+                        shape.setMap(overviewer.map);
                     }
                 }
             }
@@ -617,7 +636,10 @@ var overviewer = {
             var coordsDiv = document.createElement('DIV');
             coordsDiv.id = 'coordsDiv';
             coordsDiv.innerHTML = '';
-            overviewer.map.controls[google.maps.ControlPosition.BOTTOM_LEFT].push(coordsDiv);
+            if (overviewerConfig.map.controls.coordsBox) {
+                overviewer.map.controls[google.maps.ControlPosition.BOTTOM_LEFT].push(coordsDiv);
+            }
+            
             // Update coords on mousemove
             google.maps.event.addListener(overviewer.map, 'mousemove', function (event) {
                 var worldcoords = overviewer.util.fromLatLngToWorld(event.latLng.lat(), event.latLng.lng());
@@ -684,7 +706,7 @@ var overviewer = {
                 overviewer.util.createDropDown('Regions', items);
             }
 
-            if (overviewer.collections.overlays.length > 0) {
+            if (overviewerConfig.map.controls.overlays && overviewer.collections.overlays.length > 0) {
                 // overlay maps control
                 var items = [];
                 for (i in overviewer.collections.overlays) {
@@ -712,6 +734,9 @@ var overviewer = {
                 }
                 overviewer.util.createDropDown('Overlays', items);
             }
+            
+            // call out to create search box, as it's pretty complicated
+            overviewer.util.createSearchBox();
         },
         /**
          * Reusable method for creating drop-down menus
@@ -832,8 +857,10 @@ var overviewer = {
                     $(searchDropDown).fadeOut();
                 }
             });
-
-            overviewer.map.controls[google.maps.ControlPosition.TOP_RIGHT].push(searchControl);
+            
+            if (overviewerConfig.map.controls.searchBox) {
+                overviewer.map.controls[google.maps.ControlPosition.TOP_RIGHT].push(searchControl);
+            }
         },
         /**
          * Create the pop-up infobox for when you click on a region, this can't
