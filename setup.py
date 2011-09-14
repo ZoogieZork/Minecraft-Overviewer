@@ -91,10 +91,15 @@ def recursive_package_data(src, package_dir='overviewer_core'):
 #
 
 if py2exe is not None:
-    setup_kwargs['console'] = ['overviewer.py']
+    setup_kwargs['comments'] = "http://overviewer.org"
+    # py2exe likes a very particular type of version number:
+    setup_kwargs['version'] = util.findGitVersion().replace("-",".")
+
+    setup_kwargs['console'] = ['overviewer.py', 'contribManager.py']
     setup_kwargs['data_files'] = [('', doc_files)]
     setup_kwargs['data_files'] += recursive_data_files('overviewer_core/data/textures', 'textures')
     setup_kwargs['data_files'] += recursive_data_files('overviewer_core/data/web_assets', 'web_assets')
+    setup_kwargs['data_files'] += recursive_data_files('contrib', 'contrib')
     setup_kwargs['zipfile'] = None
     if platform.system() == 'Windows' and '64bit' in platform.architecture():
         b = 3
@@ -144,7 +149,7 @@ except:
         
 
 # used to figure out what files to compile
-render_modes = ['normal', 'overlay', 'lighting', 'night', 'spawn', 'cave']
+render_modes = ['normal', 'overlay', 'lighting', 'night', 'spawn', 'cave', 'mineral']
 
 c_overviewer_files = ['main.c', 'composite.c', 'iterate.c', 'endian.c', 'rendermodes.c']
 c_overviewer_files += map(lambda mode: 'rendermode-%s.c' % (mode,), render_modes)
@@ -246,32 +251,11 @@ class CustomBuildExt(build_ext):
         self.inplace = True
         build_ext.build_extensions(self)
         
-class CheckTerrain(Command):
-    user_options=[]
-    def initialize_options(self):
-        pass
-    def finalize_options(self):
-        pass
-    def run(self):
-        from overviewer_core.textures import _find_file
-        import hashlib
-        import zipfile
-        print "checking..."
-        try:
-            f = _find_file("terrain.png", verbose=True)
-        except IOError:
-            log.error("Could not find the file terrain.png")
-            return
-
-        h = hashlib.sha1()
-        h.update(f.read())
-        log.info("Hash of terrain.png file is: %s", h.hexdigest())
 
 setup_kwargs['cmdclass']['clean'] = CustomClean
 setup_kwargs['cmdclass']['sdist'] = CustomSDist
 setup_kwargs['cmdclass']['build'] = CustomBuild
 setup_kwargs['cmdclass']['build_ext'] = CustomBuildExt
-setup_kwargs['cmdclass']['check_terrain'] = CheckTerrain
 ###
 
 setup(**setup_kwargs)

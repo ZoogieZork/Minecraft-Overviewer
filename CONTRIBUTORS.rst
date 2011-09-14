@@ -41,6 +41,7 @@ feature.
 
  * arrai <array.of.intellect@gmail.com>
  * Kyle Brantley <kyle@averageurl.com>
+ * but2002 <barryt_9@hotmail.com>
  * Eric Carr <eric@carr.no>
  * cbarber <CraigBarber@taryx.com>
  * Alex Cline <cline@vivisimo.com>
@@ -51,9 +52,11 @@ feature.
  * Ryan Hitchman <hitchmanr@gmail.com>
  * Jenny <jennytoo@gmail.com>
  * Michael Jensen <emjay1988@gmail.com>
- * Maciej Małecki <maciej.malecki@hotmail.com>
+ * Thomas Lake <tswsl1989@sucs.org>
+ * Maciej Malecki <maciej.malecki@hotmail.com>
  * Ryan McCue <ryanmccue@cubegames.net>
  * Morlok8k <otis.spankmeyer@gmail.com>
+ * Ryan Rector <rmrector@gmail.com>
  * Gregory Short <gshort2@gmail.com>
  * Sam Steele <sam@sigbox.c99.org>
  * timwolla <timwolla@mail.develfusion.com>

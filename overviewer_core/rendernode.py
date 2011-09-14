@@ -65,8 +65,15 @@ def pool_initializer(rendernode):
     
     # make sure textures are generated for this process
     # and initialize c_overviewer
-    textures.generate(path=rendernode.options.get('textures_path', None))
+    textures.generate(path=rendernode.options.get('textures_path', None),
+            north_direction=rendernode.options.get('north_direction', None))
     c_overviewer.init_chunk_render()
+    
+    # setup c_overviewer rendermode customs / options
+    for mode in rendernode.options.custom_rendermodes:
+        c_overviewer.add_custom_render_mode(mode, rendernode.options.custom_rendermodes[mode])
+    for mode in rendernode.options.rendermode_options:
+        c_overviewer.set_render_mode_options(mode, rendernode.options.rendermode_options[mode])
     
     # load biome data in each process, if needed
     for quadtree in rendernode.quadtrees:
@@ -132,8 +139,8 @@ class RenderNode(object):
         else:
             if not complete % 1000 == 0:
                 return
-        logging.info("{0}/{1} tiles complete on level {2}/{3}".format(
-                complete, total, level, self.max_p))
+        logging.info("{0}/{1} ({4}%) tiles complete on level {2}/{3}".format(
+                complete, total, level, self.max_p, '%.1f' % ( (100.0 * complete) / total) ))
                 
     def go(self, procs):
         """Renders all tiles"""
@@ -144,7 +151,9 @@ class RenderNode(object):
             pool = FakePool()
             pool_initializer(self)
         else:
+            pool_initializer(self)
             pool = multiprocessing.Pool(processes=procs,initializer=pool_initializer,initargs=(self,))
+            
             #warm up the pool so it reports all the worker id's
             if logging.getLogger().level >= 10:
                 pool.map(bool,xrange(multiprocessing.cpu_count()),1)

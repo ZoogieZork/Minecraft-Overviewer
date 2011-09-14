@@ -191,9 +191,20 @@ Options
     a short description of each. If you provide more than one mode (separated
     by commas), Overviewer will render all of them at once, and provide a
     toggle on the resulting map to switch between them.
+    
+    If for some reason commas do not work for your shell (like if you're using
+    Powershell on Windows), you can also use a colon ':' or a forward slash '/'
+    to separate the modes.
 
 --list-rendermodes
     List the available render modes, and a short description of each.
+
+--north-direction=NORTH_DIRECTION
+    Specifies which corner of the screen north will point to.
+    Valid options are: lower-left, upper-left, upper-right, lower-right.
+    If you do not specify this option, it will default to whatever direction
+    the existing map uses. For new maps, it defaults to lower-left for
+    historical reasons.
 
 --settings=PATH
     Use this option to load settings from a file. The format of this file is
@@ -228,8 +239,8 @@ zoom=ZOOM
 
     This is equivalent to setting the dimensions of the highest zoom level. It
     does not actually change how the map is rendered, but rather *how much of
-    the map is rendered.* (Calling this option "zoom" may be a bit misleading,
-    I know)
+    the map is rendered.* Setting this option too low *will crop your map.*
+    (Calling this option "zoom" may be a bit misleading, I know)
    
     To be precise, it sets the width and height of the highest zoom level, in
     tiles. A zoom level of z means the highest zoom level of your map will be
@@ -263,6 +274,10 @@ textures_path
     This is like web_assets_path, but instead it provides an alternative texture
     source. Overviewer looks in here for terrain.png and other textures before
     it looks anywhere else.
+
+north_direction
+    Specifies which corner of the screen north will point to.
+    Valid options are: lower-left, upper-left, upper-right, lower-right.
 
 Viewing the Results
 -------------------

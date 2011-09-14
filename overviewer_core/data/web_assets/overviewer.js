@@ -313,6 +313,9 @@ var overviewer = {
                              'title':   jQuery.trim(item.msg),
                              'icon':    overviewerConfig.CONST.image.queryMarker
                         });
+                        google.maps.event.addListener(marker, 'click', function(){ marker.setVisible(false); });
+
+
                         continue;
                     }
 
@@ -531,7 +534,20 @@ var overviewer = {
             // the width and height of all the highest-zoom tiles combined,
             // inverted
             var perPixel = 1.0 / (overviewerConfig.CONST.tileSize *
-                Math.pow(2, overviewerConfig.map.maxZoom));
+                Math.pow(2, overviewerConfig.map.zoomLevels));
+
+            if(overviewerConfig.map.north_direction == 'upper-left'){
+                temp = x;
+                x = -y-1;
+                y = temp;
+            } else if(overviewerConfig.map.north_direction == 'upper-right'){
+                x = -x-1;
+                y = -y-1;
+            } else if(overviewerConfig.map.north_direction == 'lower-right'){
+                temp = x;
+                x = y;
+                y = -temp-1;
+            }
 
             // This information about where the center column is may change with
             // a different drawing implementation -- check it again after any
@@ -539,13 +555,13 @@ var overviewer = {
 
             // point (0, 0, 127) is at (0.5, 0.0) of tile (tiles/2 - 1, tiles/2)
             // so the Y coordinate is at 0.5, and the X is at 0.5 -
-            // ((tileSize / 2) / (tileSize * 2^maxZoom))
-            // or equivalently, 0.5 - (1 / 2^(maxZoom + 1))
-            var lng = 0.5 - (1.0 / Math.pow(2, overviewerConfig.map.maxZoom + 1));
+            // ((tileSize / 2) / (tileSize * 2^zoomLevels))
+            // or equivalently, 0.5 - (1 / 2^(zoomLevels + 1))
+            var lng = 0.5 - (1.0 / Math.pow(2, overviewerConfig.map.zoomLevels + 1));
             var lat = 0.5;
 
-            // the following metrics mimic those in ChunkRenderer.chunk_render
-            // in "chunk.py" or, equivalently, chunk_render in src/iterate.c
+            // the following metrics mimic those in
+            // chunk_render in src/iterate.c
 
             // each block on X axis adds 12px to x and subtracts 6px from y
             lng += 12 * x * perPixel;
@@ -583,11 +599,11 @@ var overviewer = {
             // the width and height of all the highest-zoom tiles combined,
             // inverted
             var perPixel = 1.0 / (overviewerConfig.CONST.tileSize *
-                Math.pow(2, overviewerConfig.map.maxZoom));
+                Math.pow(2, overviewerConfig.map.zoomLevels));
 
             // Revert base positioning
             // See equivalent code in fromWorldToLatLng()
-            lng -= 0.5 - (1.0 / Math.pow(2, overviewerConfig.map.maxZoom + 1));
+            lng -= 0.5 - (1.0 / Math.pow(2, overviewerConfig.map.zoomLevels + 1));
             lat -= 0.5;
 
             // I'll admit, I plugged this into Wolfram Alpha:
@@ -603,6 +619,19 @@ var overviewer = {
             // only latitude and longitude, so assume Y=64.
             point.x += 64;
             point.z -= 64;
+
+            if(overviewerConfig.map.north_direction == 'upper-left'){
+                temp = point.z;
+                point.z = -point.x;
+                point.x = temp;
+            } else if(overviewerConfig.map.north_direction == 'upper-right'){
+                point.x = -point.x;
+                point.z = -point.z;
+            } else if(overviewerConfig.map.north_direction == 'lower-right'){
+                temp = point.z;
+                point.z = point.x;
+                point.x = -temp;
+            }
 
             return point;
         },
@@ -814,6 +843,25 @@ var overviewer = {
 
             var searchInput = document.createElement("input");
             searchInput.type = "text";
+			searchInput.value = "Sign Search";
+			searchInput.title = "Sign Search";
+            $(searchInput).addClass("inactive");
+			
+			/* Hey dawg, I heard you like functions.
+			 * So we defined a function inside your function.
+             */
+            searchInput.onfocus = function() {
+                if (searchInput.value == "Sign Search") {
+                    searchInput.value = "";
+                    $(searchInput).removeClass("inactive").addClass("active");
+                }
+            };
+			searchInput.onblur = function() {
+                if (searchInput.value == "") {
+                    searchInput.value = "Sign Search";
+                    $(searchInput).removeClass("active").addClass("inactive");
+                }
+            };
 
             searchControl.appendChild(searchInput);
 

@@ -117,7 +117,7 @@ estimate_blocklevel(RenderModeLighting *self, RenderState *state,
     blocklevel = getArrayByte3D(blocklight, local_x, local_y, local_z);
     
     /* no longer a guess */
-    if (!(block == 44 || block == 53 || block == 67) && authoratative) {
+    if (!(block == 44 || block == 53 || block == 67 || block == 108 || block == 109) && authoratative) {
         *authoratative = 1;
     }
     
@@ -169,25 +169,23 @@ get_lighting_coefficient(RenderModeLighting *self, RenderState *state,
     }
     
     block = getArrayByte3D(blocks, local_x, local_y, local_z);
-    
-    /* if this block is opaque, use a fully-lit coeff instead
-       to prevent stippled lines along chunk boundaries! */
-    if (!is_transparent(block)) {
-        return self->calculate_darkness(15, 0);
-    }
-    
     skylevel = getArrayByte3D(skylight, local_x, local_y, local_z);
     blocklevel = getArrayByte3D(blocklight, local_x, local_y, local_z);
 
     /* special half-step handling */
-    if (block == 44 || block == 53 || block == 67) {
+    if (block == 44 || block == 53 || block == 67 || block == 108 || block == 109) {
         unsigned int upper_block;
         
         /* stairs and half-blocks take the skylevel from the upper block if it's transparent */
         if (local_z != 127) {
-            upper_block = getArrayByte3D(blocks, local_x, local_y, local_z + 1);
+            int upper_counter = 0;
+            /* but if the upper_block is one of these special half-steps, we need to look at *its* upper_block */
+            do {
+                upper_counter++; 
+                upper_block = getArrayByte3D(blocks, local_x, local_y, local_z + upper_counter);
+            } while ((upper_block == 44 || upper_block == 53 || upper_block == 67 || upper_block == 108 || upper_block == 109) && local_z < 127);
             if (is_transparent(upper_block)) {
-                skylevel = getArrayByte3D(skylight, local_x, local_y, local_z + 1);
+                skylevel = getArrayByte3D(skylight, local_x, local_y, local_z + upper_counter);
             }
         } else {
             upper_block = 0;
@@ -195,7 +193,7 @@ get_lighting_coefficient(RenderModeLighting *self, RenderState *state,
         }
         
         /* the block has a bad blocklevel, estimate it from neigborhood
-        /* use given coordinates, no local ones! */
+         * use given coordinates, no local ones! */
         blocklevel = estimate_blocklevel(self, state, x, y, z, NULL);
 
     }
@@ -214,30 +212,57 @@ static inline void
 do_shading_with_mask(RenderModeLighting *self, RenderState *state,
                      int x, int y, int z, PyObject *mask) {
     float black_coeff;
-
+    
     /* first, check for occlusion if the block is in the local chunk */
     if (x >= 0 && x < 16 && y >= 0 && y < 16 && z >= 0 && z < 128) {
         unsigned char block = getArrayByte3D(state->blocks, x, y, z);
-        if (!is_transparent(block)) {
+        
+        if (!is_transparent(block) && !render_mode_hidden(state->rendermode, x, y, z)) {
             /* this face isn't visible, so don't draw anything */
             return;
         }
+    } else if (self->skip_sides && (x == -1) && (state->left_blocks != Py_None)) {
+        unsigned char block = getArrayByte3D(state->left_blocks, 15, state->y, state->z);
+        if (!is_transparent(block)) {
+            /* the same thing but for adjacent chunks, this solves an
+               ugly black doted line between chunks in night rendermode.
+               This wouldn't be necessary if the textures were truly
+               tessellate-able */
+               return;
+           }
+    } else if (self->skip_sides && (y == 16) && (state->right_blocks != Py_None)) {
+        unsigned char block = getArrayByte3D(state->right_blocks, state->x, 0, state->z);
+        if (!is_transparent(block)) {
+            /* the same thing but for adjacent chunks, this solves an
+               ugly black doted line between chunks in night rendermode.
+               This wouldn't be necessary if the textures were truly
+               tessellate-able */
+               return;
+           }
     }
     
     black_coeff = get_lighting_coefficient(self, state, x, y, z);
+    black_coeff *= self->shade_strength;
     alpha_over_full(state->img, self->black_color, mask, black_coeff, state->imgx, state->imgy, 0, 0);
 }
 
 static int
-rendermode_lighting_start(void *data, RenderState *state) {
+rendermode_lighting_start(void *data, RenderState *state, PyObject *options) {
     RenderModeLighting* self;
 
     /* first, chain up */
-    int ret = rendermode_normal.start(data, state);
+    int ret = rendermode_normal.start(data, state, options);
     if (ret != 0)
         return ret;
     
     self = (RenderModeLighting *)data;
+    
+    /* skip sides by default */
+    self->skip_sides = 1;
+
+    self->shade_strength = 1.0;
+    if (!render_mode_parse_option(options, "shade_strength", "f", &(self->shade_strength)))
+        return 1;
     
     self->black_color = PyObject_GetAttrString(state->chunk, "black_color");
     self->facemasks_py = PyObject_GetAttrString(state->chunk, "facemasks");
@@ -277,9 +302,15 @@ rendermode_lighting_finish(void *data, RenderState *state) {
 }
 
 static int
-rendermode_lighting_occluded(void *data, RenderState *state) {
+rendermode_lighting_occluded(void *data, RenderState *state, int x, int y, int z) {
     /* no special occlusion here */
-    return rendermode_normal.occluded(data, state);
+    return rendermode_normal.occluded(data, state, x, y, z);
+}
+
+static int
+rendermode_lighting_hidden(void *data, RenderState *state, int x, int y, int z) {
+    /* no special hiding here */
+    return rendermode_normal.hidden(data, state, x, y, z);
 }
 
 static void
@@ -293,7 +324,22 @@ rendermode_lighting_draw(void *data, RenderState *state, PyObject *src, PyObject
     self = (RenderModeLighting *)data;
     x = state->x, y = state->y, z = state->z;
     
-    if (is_transparent(state->block)) {
+    if ((state->block == 9) || (state->block == 79)) { /* special case for water and ice */
+        /* looks like we need a new case for lighting, there are
+         * blocks that are transparent for occlusion calculations and
+         * need per-face shading if the face is drawn. */
+        if ((state->block_pdata & 16) == 16) {
+            do_shading_with_mask(self, state, x, y, z+1, self->facemasks[0]);
+        }
+        if ((state->block_pdata & 2) == 2) { /* bottom left */
+            do_shading_with_mask(self, state, x-1, y, z, self->facemasks[1]);
+        }
+        if ((state->block_pdata & 4) == 4) { /* bottom right */
+            do_shading_with_mask(self, state, x, y+1, z, self->facemasks[2]);
+        }
+        /* leaves are transparent for occlusion calculations but they 
+         * per face-shading to look as in game */
+    } else if (is_transparent(state->block) && (state->block != 18)) {
         /* transparent: do shading on whole block */
         do_shading_with_mask(self, state, x, y, z, mask_light);
     } else {
@@ -304,12 +350,20 @@ rendermode_lighting_draw(void *data, RenderState *state, PyObject *src, PyObject
     }
 }
 
+const RenderModeOption rendermode_lighting_options[] = {
+    {"shade_strength", "how dark to make the shadows, from 0.0 to 1.0 (default: 1.0)"},
+    {NULL, NULL}
+};
+
 RenderModeInterface rendermode_lighting = {
-    "lighting", "draw shadows from the lighting data",
+    "lighting", "Lighting",
+    "draw shadows from the lighting data",
+    rendermode_lighting_options,
     &rendermode_normal,
     sizeof(RenderModeLighting),
     rendermode_lighting_start,
     rendermode_lighting_finish,
     rendermode_lighting_occluded,
+    rendermode_lighting_hidden,
     rendermode_lighting_draw,
 };

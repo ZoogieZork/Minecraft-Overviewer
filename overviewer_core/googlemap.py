@@ -23,7 +23,7 @@ from time import strftime, localtime
 import json
 
 import util
-from c_overviewer import get_render_mode_inheritance
+from c_overviewer import get_render_mode_inheritance, get_render_mode_info
 import overviewer_version
 
 """
@@ -53,10 +53,15 @@ def mirror_dir(src, dst, entities=None):
         elif os.path.isfile(os.path.join(src,entry)):
             try:
                 shutil.copy(os.path.join(src, entry), os.path.join(dst, entry))
-            except IOError:
-                # maybe permission problems?
-                os.chmod(os.path.join(src, entry), stat.S_IRUSR)
-                os.chmod(os.path.join(dst, entry), stat.S_IWUSR)
+            except IOError as outer: 
+                try:
+                    # maybe permission problems?
+                    src_stat = os.stat(os.path.join(src, entry))
+                    os.chmod(os.path.join(src, entry), src_stat.st_mode | stat.S_IRUSR)
+                    dst_stat = os.stat(os.path.join(dst, entry))
+                    os.chmod(os.path.join(dst, entry), dst_stat.st_mode | stat.S_IWUSR)
+                except OSError: # we don't care if this fails
+                    pass
                 shutil.copy(os.path.join(src, entry), os.path.join(dst, entry))
                 # if this stills throws an error, let it propagate up
 
@@ -72,6 +77,7 @@ class MapGen(object):
         self.web_assets_hook = configInfo.get('web_assets_hook', None)
         self.web_assets_path = configInfo.get('web_assets_path', None)
         self.bg_color = configInfo.get('bg_color')
+        self.north_direction = configInfo.get('north_direction', 'lower-left')
         
         if not len(quadtrees) > 0:
             raise ValueError("there must be at least one quadtree to work on")
@@ -114,14 +120,25 @@ class MapGen(object):
                 "{minzoom}", str(0))
         config = config.replace(
                 "{maxzoom}", str(zoomlevel))
+        config = config.replace(
+                "{zoomlevels}", str(zoomlevel))
+        config = config.replace(
+                "{north_direction}", self.north_direction)
         
         config = config.replace("{spawn_coords}",
                                 json.dumps(list(self.world.spawn)))
 
         #config = config.replace("{bg_color}", self.bg_color)
         
+        # helper function to get a label for the given rendermode
+        def get_render_mode_label(rendermode):
+            info = get_render_mode_info(rendermode)
+            if 'label' in info:
+                return info['label']
+            return rendermode.capitalize()
+        
         # create generated map type data, from given quadtrees
-        maptypedata = map(lambda q: {'label' : q.rendermode.capitalize(),
+        maptypedata = map(lambda q: {'label' : get_render_mode_label(q.rendermode),
                                      'path' : q.tiledir,
                                      'bg_color': self.bg_color,
                                      'overlay' : 'overlay' in get_render_mode_inheritance(q.rendermode),
@@ -150,9 +167,6 @@ class MapGen(object):
 
 
     def finalize(self):
-        if self.skipjs:
-            return
-
         # since we will only discover PointsOfInterest in chunks that need to be 
         # [re]rendered, POIs like signs in unchanged chunks will not be listed
         # in self.world.POI.  To make sure we don't remove these from markers.js
@@ -165,6 +179,17 @@ class MapGen(object):
         else:
             markers = self.world.POI
 
+        # save persistent data
+        self.world.persistentData['POI'] = self.world.POI
+        self.world.persistentData['north_direction'] = self.world.north_direction
+        with open(self.world.pickleFile,"wb") as f:
+            cPickle.dump(self.world.persistentData,f)
+
+        
+        # the rest of the function is javascript stuff
+        if self.skipjs:
+            return
+
         # write out the default marker table
         with open(os.path.join(self.destdir, "markers.js"), 'w') as output:
             output.write("overviewer.collections.markerDatas.push([\n")
@@ -175,11 +200,6 @@ class MapGen(object):
                 output.write("\n")
             output.write("]);\n")
         
-        # save persistent data
-        self.world.persistentData['POI'] = self.world.POI
-        with open(self.world.pickleFile,"wb") as f:
-            cPickle.dump(self.world.persistentData,f)
-
         # write out the default (empty, but documented) region table
         with open(os.path.join(self.destdir, "regions.js"), 'w') as output:
             output.write('overviewer.collections.regionDatas.push([\n')

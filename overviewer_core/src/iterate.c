@@ -26,11 +26,10 @@ static PyObject *transparent_blocks = NULL;
 
 PyObject *init_chunk_render(PyObject *self, PyObject *args) {
    
-    /* this function only needs to be called once, anything more is an
-     * error... */
+    /* this function only needs to be called once, anything more should be
+     * ignored */
     if (blockmap) {
-        PyErr_SetString(PyExc_RuntimeError, "init_chunk_render should only be called once per process.");
-        return NULL;
+        Py_RETURN_NONE;
     }
 
     textures = PyImport_ImportModule("overviewer_core.textures");
@@ -174,7 +173,7 @@ generate_pseudo_data(RenderState *state, unsigned char ancilData) {
             data = (check_adjacent_blocks(state, x, y, z, state->block) ^ 0x0f);
             return data;
         }
-    } else if (state->block == 20) { /* glass */
+    } else if ((state->block == 20) || (state->block == 79)) { /* glass and ice */
         /* an aditional bit for top is added to the 4 bits of check_adjacent_blocks */
         if ((z != 127) && (getArrayByte3D(state->blocks, x, y, z+1) == 20)) {
             data = 0;
@@ -284,7 +283,9 @@ generate_pseudo_data(RenderState *state, unsigned char ancilData) {
 
         return final_data;
 
-    } else if (state->block == 90) {
+    /* fences, iron bars and glass panes */
+    } else if ((state->block == 90) || (state->block == 101) ||
+               (state->block == 102)) {
         return check_adjacent_blocks(state, x, y, z, state->block);
     }
 
@@ -298,6 +299,7 @@ generate_pseudo_data(RenderState *state, unsigned char ancilData) {
 PyObject*
 chunk_render(PyObject *self, PyObject *args) {
     RenderState state;
+    PyObject *rendermode_py;
 
     int xoff, yoff;
     
@@ -310,10 +312,8 @@ chunk_render(PyObject *self, PyObject *args) {
     PyObject *up_left_blocks_py;
     PyObject *up_right_blocks_py;
 
-    RenderModeInterface *rendermode;
+    RenderMode *rendermode;
 
-    void *rm_data;
-                
     PyObject *t = NULL;
     
     if (!PyArg_ParseTuple(args, "OOiiO",  &state.self, &state.img, &xoff, &yoff, &state.blockdata_expanded))
@@ -324,11 +324,11 @@ chunk_render(PyObject *self, PyObject *args) {
     state.chunk = chunk_mod;
     
     /* set up the render mode */
-    rendermode = get_render_mode(&state);
-    rm_data = calloc(1, rendermode->data_size);
-    if (rendermode->start(rm_data, &state)) {
-        free(rm_data);
-        return Py_BuildValue("i", "-1");
+    rendermode_py = PyObject_GetAttrString(state.self, "rendermode");
+    state.rendermode = rendermode = render_mode_create(PyString_AsString(rendermode_py), &state);
+    Py_DECREF(rendermode_py);
+    if (rendermode == NULL) {
+        return NULL;
     }
 
     /* get the image size */
@@ -360,6 +360,10 @@ chunk_render(PyObject *self, PyObject *args) {
     up_right_blocks_py = PyObject_GetAttrString(state.self, "up_right_blocks");
     state.up_right_blocks = up_right_blocks_py;
     
+    /* set up the random number generator again for each chunk
+       so tallgrass is in the same place, no matter what mode is used */
+    srand(1);
+    
     for (state.x = 15; state.x > -1; state.x--) {
         for (state.y = 0; state.y < 16; state.y++) {
             PyObject *blockid = NULL;
@@ -372,9 +376,9 @@ chunk_render(PyObject *self, PyObject *args) {
             for (state.z = 0; state.z < 128; state.z++) {
                 state.imgy -= 12;
 		
-		/* get blockid */
+                /* get blockid */
                 state.block = getArrayByte3D(blocks_py, state.x, state.y, state.z);
-                if (state.block == 0) {
+                if (state.block == 0 || render_mode_hidden(rendermode, state.x, state.y, state.z)) {
                     continue;
                 }
                 
@@ -394,7 +398,7 @@ chunk_render(PyObject *self, PyObject *args) {
                 blockid = PyInt_FromLong(state.block);
 
                 // check for occlusion
-                if (rendermode->occluded(rm_data, &state)) {
+                if (render_mode_occluded(rendermode, state.x, state.y, state.z)) {
                     continue;
                 }
                 
@@ -408,11 +412,19 @@ chunk_render(PyObject *self, PyObject *args) {
                     PyObject *tmp;
                     
                     unsigned char ancilData = getArrayByte3D(state.blockdata_expanded, state.x, state.y, state.z);
+                    state.block_data = ancilData;
+                    /* block that need pseudo ancildata:
+                     * grass, water, glass, chest, restone wire,
+                     * ice, fence, portal, iron bars, glass panes */
                     if ((state.block ==  2) || (state.block ==  9) || 
                         (state.block == 20) || (state.block == 54) || 
-                        (state.block == 55) || (state.block == 85) || 
-                        (state.block == 90)) {
+                        (state.block == 55) || (state.block == 79) ||
+                        (state.block == 85) || (state.block == 90) ||
+                        (state.block == 101) || (state.block == 102)) {
                         ancilData = generate_pseudo_data(&state, ancilData);
+                        state.block_pdata = ancilData;
+                    } else {
+                        state.block_pdata = 0;
                     }
                     
                     tmp = PyTuple_New(2);
@@ -430,14 +442,29 @@ chunk_render(PyObject *self, PyObject *args) {
                 if (t != NULL && t != Py_None)
                 {
                     PyObject *src, *mask, *mask_light;
+                    int randx = 0, randy = 0;
                     src = PyTuple_GetItem(t, 0);
                     mask = PyTuple_GetItem(t, 1);
                     mask_light = PyTuple_GetItem(t, 2);
 
                     if (mask == Py_None)
                         mask = src;
+
+                    if (state.block == 31) {
+                        /* add a random offset to the postion of the tall grass to make it more wild */
+                        randx = rand() % 6 + 1 - 3;
+                        randy = rand() % 6 + 1 - 3;
+                        state.imgx += randx;
+                        state.imgy += randy;
+                    }
                     
-                    rendermode->draw(rm_data, &state, src, mask, mask_light);
+                    render_mode_draw(rendermode, src, mask, mask_light);
+                    
+                    if (state.block == 31) {
+                        /* undo the random offsets */
+                        state.imgx -= randx;
+                        state.imgy -= randy;
+                    }
                 }               
             }
             
@@ -449,8 +476,7 @@ chunk_render(PyObject *self, PyObject *args) {
     }
 
     /* free up the rendermode info */
-    rendermode->finish(rm_data, &state);
-    free(rm_data);
+    render_mode_destroy(rendermode);
     
     Py_DECREF(blocks_py);
     Py_XDECREF(left_blocks_py);

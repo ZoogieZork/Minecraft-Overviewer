@@ -23,6 +23,7 @@ import math
 from random import randint
 import numpy
 from PIL import Image, ImageEnhance, ImageOps, ImageDraw
+import logging
 
 import util
 import composite
@@ -47,13 +48,13 @@ def _find_file(filename, mode="rb", verbose=False):
     if _find_file_local_path:
         path = os.path.join(_find_file_local_path, filename)
         if os.path.exists(path):
-            if verbose: print "Found %s in '%s'" % (filename, path)
+            if verbose: logging.info("Found %s in '%s'", filename, path)
             return open(path, mode)
     
     programdir = util.get_program_path()
     path = os.path.join(programdir, filename)
     if os.path.exists(path):
-        if verbose: print "Found %s in '%s'" % (filename, path)
+        if verbose: logging.info("Found %s in '%s'", filename, path)
         return open(path, mode)
     
     path = os.path.join(programdir, "overviewer_core", "data", "textures", filename)
@@ -63,13 +64,13 @@ def _find_file(filename, mode="rb", verbose=False):
         # windows special case, when the package dir doesn't exist
         path = os.path.join(programdir, "textures", filename)
         if os.path.exists(path):
-            if verbose: print "Found %s in '%s'" % (filename, path)
+            if verbose: logging.info("Found %s in '%s'", filename, path)
             return open(path, mode)
 
     if sys.platform == "darwin":
         path = os.path.join("/Applications/Minecraft", filename)
         if os.path.exists(path):
-            if verbose: print "Found %s in '%s'" % (filename, path)
+            if verbose: logging.info("Found %s in '%s'", filename, path)
             return open(path, mode)
 
     # Find minecraft.jar.
@@ -82,19 +83,21 @@ def _find_file(filename, mode="rb", verbose=False):
                 "Application Support", "minecraft","bin","minecraft.jar"))
         jarpaths.append(os.path.join(os.environ['HOME'], ".minecraft", "bin",
                 "minecraft.jar"))
-    jarpaths.append(programdir)
-    jarpaths.append(os.getcwd())
+    jarpaths.append(os.path.join(programdir,"minecraft.jar"))
+    jarpaths.append(os.path.join(os.getcwd(), "minecraft.jar"))
+    if _find_file_local_path:
+        jarpaths.append(os.path.join(_find_file_local_path, "minecraft.jar"))
 
     for jarpath in jarpaths:
         if os.path.exists(jarpath):
             try:
                 jar = zipfile.ZipFile(jarpath)
-                if verbose: print "Found %s in '%s'" % (filename, jarpath)
+                if verbose: logging.info("Found %s in '%s'", filename, jarpath)
                 return jar.open(filename)
             except (KeyError, IOError):
                 pass
 
-    raise IOError("Could not find the file {0}. Is Minecraft installed? If so, I couldn't find the minecraft.jar file.".format(filename))
+    raise IOError("Could not find the file `{0}'. You can either place it in the same place as overviewer.py, use --textures-path, or install the Minecraft client.".format(filename))
 
 def _load_image(filename):
     """Returns an image object"""
@@ -162,13 +165,13 @@ def transform_image_side(img, blockID=None):
         # (don't just crop img, since we want the size of
         # img to be unchanged
         mask = img.crop((0,8,16,16))
-        n = Image.new(img.mode, img.size, (38,92,255,0))
+        n = Image.new(img.mode, img.size, bgcolor)
         composite.alpha_over(n, mask,(0,0,16,8), mask)
         img = n
     if blockID in (78,): # snow
         # make the top three quarters transparent
         mask = img.crop((0,12,16,16))
-        n = Image.new(img.mode, img.size, (38,92,255,0))
+        n = Image.new(img.mode, img.size, bgcolor)
         composite.alpha_over(n, mask,(0,12,16,16), mask)
         img = n
 
@@ -246,7 +249,7 @@ def _build_block(top, side, blockID=None):
     top and side should be 16x16 image objects. Returns a 24x24 image
 
     """
-    img = Image.new("RGBA", (24,24), (38,92,255,0))
+    img = Image.new("RGBA", (24,24), bgcolor)
     
     original_texture = top.copy()
     top = transform_image(top, blockID)
@@ -355,7 +358,7 @@ def _build_full_block(top, side1, side2, side3, side4, bottom=None, blockID=None
             side4 = side4.copy()
             ImageDraw.Draw(side4).rectangle((0, 0,16,crop_height),outline=(0,0,0,0),fill=(0,0,0,0))
 
-    img = Image.new("RGBA", (24,24), (38,92,255,0))
+    img = Image.new("RGBA", (24,24), bgcolor)
     
     # first back sides
     if side1 != None :
@@ -431,9 +434,11 @@ def _build_blockimages():
        #       48  49  50  51  52  53  54  55  56  57  58  59  60  61  62  63
                36, 37, -1, -1, 65, -1, -1, -1, 50, 24, -1, -1, 86, -1, -1, -1,
        #       64  65  66  67  68  69  70  71  72  73  74  75  76  77  78  79
-               -1, -1, -1, -1, -1, -1, -1, -1, -1, 51, 51, -1, -1, -1, 66, 67,
-       #       80  81  82  83  84  85  86  87  88  89  90  91
-               66, 69, 72, 73, 75, -1,102,103,104,105,-1, 102 # clay?
+               -1, -1, -1, -1, -1, -1, -1, -1, -1, 51, 51, -1, -1, -1, 66, -1,
+       #       80  81  82  83  84  85  86  87  88  89  90  91  92  93  94  95
+               66, 69, 72, 73, 75, -1,102,103,104,105,-1, 102, -1, -1, -1, -1,
+       #       96  97  98  99  100  101  102  103 
+               -1, -1, -1, -1, -1,   -1,  -1, 137,
         ]
 
     # NOTE: For non-block textures, the sideid is ignored, but can't be -1
@@ -448,9 +453,11 @@ def _build_blockimages():
        #        48  49  50  51  52  53  54  55  56  57  58  59  60  61  62  63
                 36, 37, -1, -1, 65, -1, -1,101, 50, 24, -1, -1, 86, -1, -1, -1,
        #        64  65  66  67  68  69  70  71  72  73  74  75  76  77  78  79
-                -1, -1, -1, -1, -1, -1, -1, -1, -1, 51, 51, -1, -1, -1, 66, 67,
-       #        80  81  82  83  84  85  86  87  88  89  90  91
-                66, 70, 72, 73, 74,-1 ,118,103,104,105, -1, 118
+                -1, -1, -1, -1, -1, -1, -1, -1, -1, 51, 51, -1, -1, -1, 66, -1,
+       #        80  81  82  83  84  85  86  87  88  89  90  91  92  93  94  95
+                66, 70, 72, 73, 74,-1 ,118,103,104,105, -1, 118,-1, -1, -1, -1,
+       #        96  97  98  99  100  101  102  103 
+                -1, -1, -1, -1, -1,   -1,  -1, 136,
         ]
 
     # This maps block id to the texture that goes on the side of the block
@@ -513,9 +520,10 @@ def generate_texture_tuple(img, blockid):
 
 def generate_special_texture(blockID, data):
     """Generates a special texture, such as a correctly facing minecraft track"""
-    #print "%s has ancillary data: %X" %(blockID, data)
-    # TODO ladders, stairs, levers, buttons, and signs
-    # all need to behandled here (and in chunkpy)
+
+    data = convert_data(blockID, data)
+
+    # blocks need to be handled here (and in chunk.py)
     
     if blockID == 2: # grass
         # data & 0x10 means SNOW sides
@@ -553,12 +561,14 @@ def generate_special_texture(blockID, data):
         return generate_texture_tuple(img, blockID)
 
 
-    if blockID == 9 or blockID == 20: # spring water, flowing water and waterfall water, AND glass
-        # water and glass share the way to be rendered
+    if blockID == 9 or blockID == 20 or blockID == 79: # spring water, flowing water and waterfall water, AND glass, AND ice
+        # water,glass and ice share the way to be rendered
         if blockID == 9:
             texture = _load_image("water.png")
-        else:
+        elif blockID == 20:
             texture = terrain_images[49]
+        else:
+            texture = terrain_images[67]
         
         if (data & 0b10000) == 16:
             top = texture
@@ -580,6 +590,10 @@ def generate_special_texture(blockID, data):
         if (data & 0b0100) == 4:
             side4 = texture    # bottom right
         else: side4 = None
+        
+        # if nothing shown do not draw at all
+        if top == side3 == side4 == None:
+            return None
         
         img = _build_full_block(top,None,None,side3,side4)
         return generate_texture_tuple(img, blockID)
@@ -737,7 +751,7 @@ def generate_special_texture(blockID, data):
         ImageDraw.Draw(side_t).rectangle((0, 4,16,16),outline=(0,0,0,0),fill=(0,0,0,0))
 
         # generate the horizontal piston extension stick
-        h_stick = Image.new("RGBA", (24,24), (38,92,255,0))
+        h_stick = Image.new("RGBA", (24,24), bgcolor)
         temp = transform_image_side(side_t, blockID)
         composite.alpha_over(h_stick, temp, (1,7), temp)
         temp = transform_image(side_t.rotate(90))
@@ -748,7 +762,7 @@ def generate_special_texture(blockID, data):
         h_stick.putalpha(sidealpha)
 
         # generate the vertical piston extension stick
-        v_stick = Image.new("RGBA", (24,24), (38,92,255,0))
+        v_stick = Image.new("RGBA", (24,24), bgcolor)
         temp = transform_image_side(side_t.rotate(90), blockID)
         composite.alpha_over(v_stick, temp, (12,6), temp)
         temp = temp.transpose(Image.FLIP_LEFT_RIGHT)
@@ -764,7 +778,7 @@ def generate_special_texture(blockID, data):
             img = _build_full_block((back_t, 12) ,None ,None ,side_t, side_t)
             composite.alpha_over(img, v_stick, (0,-3), v_stick)
         elif data & 0x07 == 0x1: # up
-            img = Image.new("RGBA", (24,24), (38,92,255,0))
+            img = Image.new("RGBA", (24,24), bgcolor)
             img2 = _build_full_block(piston_t ,None ,None ,side_t, side_t)
             composite.alpha_over(img, v_stick, (0,4), v_stick)
             composite.alpha_over(img, img2, (0,0), img2)
@@ -774,7 +788,7 @@ def generate_special_texture(blockID, data):
             composite.alpha_over(img, temp, (2,2), temp)
             composite.alpha_over(img, h_stick, (6,3), h_stick)
         elif data & 0x07 == 0x3: # west
-            img = Image.new("RGBA", (24,24), (38,92,255,0))
+            img = Image.new("RGBA", (24,24), bgcolor)
             img2 = _build_full_block(side_t.rotate(180) ,None ,None ,side_t.rotate(270), piston_t)
             composite.alpha_over(img, h_stick, (0,0), h_stick)
             composite.alpha_over(img, img2, (0,0), img2)            
@@ -782,7 +796,7 @@ def generate_special_texture(blockID, data):
             img = _build_full_block(side_t.rotate(90) ,None ,None , piston_t, side_t.rotate(270))
             composite.alpha_over(img, h_stick.transpose(Image.FLIP_LEFT_RIGHT), (0,0), h_stick.transpose(Image.FLIP_LEFT_RIGHT))
         elif data & 0x07 == 0x5: # south
-            img = Image.new("RGBA", (24,24), (38,92,255,0))
+            img = Image.new("RGBA", (24,24), bgcolor)
             img2 = _build_full_block(side_t.rotate(270) ,None ,None ,None, side_t.rotate(90))
             temp = transform_image_side(back_t, blockID)
             composite.alpha_over(img2, temp, (10,2), temp)
@@ -835,13 +849,17 @@ def generate_special_texture(blockID, data):
         if data == 0: # stone slab
             top = terrain_images[6]
             side = terrain_images[5]
-        if data == 1: # stone slab
+        elif data == 1: # stone slab
             top = terrain_images[176]
             side = terrain_images[192]
-        if data == 2: # wooden slab
+        elif data == 2: # wooden slab
             top = side = terrain_images[4]
-        if data == 3: # cobblestone slab
+        elif data == 3: # cobblestone slab
             top = side = terrain_images[16]
+        elif data == 4: # brick?
+            top = side = terrain_images[7]
+        elif data == 5: # stone brick?
+            top = side = terrain_images[54]
 
         img = _build_block(top, side, blockID)
         return generate_texture_tuple(img, blockID)
@@ -859,7 +877,7 @@ def generate_special_texture(blockID, data):
         
         # compose a torch bigger than the normal
         # (better for doing transformations)
-        torch = Image.new("RGBA", (16,16), (38,92,255,0))
+        torch = Image.new("RGBA", (16,16), bgcolor)
         composite.alpha_over(torch,small,(-4,-3))
         composite.alpha_over(torch,small,(-5,-2))
         composite.alpha_over(torch,small,(-3,-2))
@@ -885,17 +903,17 @@ def generate_special_texture(blockID, data):
             
         elif data == 5: # standing on the floor
             # compose a "3d torch".
-            img = Image.new("RGBA", (24,24), (38,92,255,0))
+            img = Image.new("RGBA", (24,24), bgcolor)
             
             small_crop = small.crop((2,2,14,14))
             slice = small_crop.copy()
             ImageDraw.Draw(slice).rectangle((6,0,12,12),outline=(0,0,0,0),fill=(0,0,0,0))
             ImageDraw.Draw(slice).rectangle((0,0,4,12),outline=(0,0,0,0),fill=(0,0,0,0))
             
-            composite.alpha_over(img, slice, (6,4))
-            composite.alpha_over(img, small_crop, (5,5))
-            composite.alpha_over(img, small_crop, (6,5))
-            composite.alpha_over(img, slice, (6,6))
+            composite.alpha_over(img, slice, (7,5))
+            composite.alpha_over(img, small_crop, (6,6))
+            composite.alpha_over(img, small_crop, (7,6))
+            composite.alpha_over(img, slice, (7,7))
 
         return generate_texture_tuple(img, blockID)
 
@@ -905,7 +923,7 @@ def generate_special_texture(blockID, data):
         side1 = transform_image_side(firetexture)
         side2 = transform_image_side(firetexture).transpose(Image.FLIP_LEFT_RIGHT)
         
-        img = Image.new("RGBA", (24,24), (38,92,255,0))
+        img = Image.new("RGBA", (24,24), bgcolor)
 
         composite.alpha_over(img, side1, (12,0), side1)
         composite.alpha_over(img, side2, (0,0), side2)
@@ -916,13 +934,16 @@ def generate_special_texture(blockID, data):
         return generate_texture_tuple(img, blockID)
 
 
-    if blockID in (53,67): # wooden and cobblestone stairs.
+    if blockID in (53,67, 108, 109): # wooden, stone brick, and cobblestone stairs.
         
         if blockID == 53: # wooden
             texture = terrain_images[4]
-            
         elif blockID == 67: # cobblestone
             texture = terrain_images[16]
+        elif blockID == 108: # red brick stairs
+            texture = terrain_images[7]
+        elif blockID == 109: # stone brick stairs
+            texture = terrain_images[54]
         
         side = texture.copy()
         half_block_u = texture.copy() # up, down, left, right
@@ -952,14 +973,14 @@ def generate_special_texture(blockID, data):
             composite.alpha_over(img, tmp2, (0,6))
             
         elif data == 1: # ascending north
-            img = Image.new("RGBA", (24,24), (38,92,255,0)) # first paste the texture in the back
+            img = Image.new("RGBA", (24,24), bgcolor) # first paste the texture in the back
             tmp1 = transform_image(half_block_r)
             composite.alpha_over(img, tmp1, (0,6))
             tmp2 = _build_full_block(half_block_l, None, None, texture, side)
             composite.alpha_over(img, tmp2)
         
         elif data == 2: # ascending west
-            img = Image.new("RGBA", (24,24), (38,92,255,0)) # first paste the texture in the back
+            img = Image.new("RGBA", (24,24), bgcolor) # first paste the texture in the back
             tmp1 = transform_image(half_block_u)
             composite.alpha_over(img, tmp1, (0,6))
             tmp2 = _build_full_block(half_block_d, None, None, side, texture)
@@ -1076,7 +1097,7 @@ def generate_special_texture(blockID, data):
             bottom = redstone_wire_t.copy().rotate(90)
         
         else:
-            bottom = Image.new("RGBA", (16,16), (38,92,255,0))
+            bottom = Image.new("RGBA", (16,16), bgcolor)
             if (data & 0b0001) == 1:
                 composite.alpha_over(bottom,branch_top_left)
                 
@@ -1120,7 +1141,7 @@ def generate_special_texture(blockID, data):
         crop2 = transform_image_side(raw_crop, blockID)
         crop3 = crop2.transpose(Image.FLIP_LEFT_RIGHT)
 
-        img = Image.new("RGBA", (24,24), (38,92,255,0))
+        img = Image.new("RGBA", (24,24), bgcolor)
         composite.alpha_over(img, crop1, (0,12), crop1)
         composite.alpha_over(img, crop2, (6,3), crop2)
         composite.alpha_over(img, crop3, (6,3), crop3)
@@ -1171,7 +1192,7 @@ def generate_special_texture(blockID, data):
         texture_stick = texture_stick.resize((12,12), Image.ANTIALIAS)
         ImageDraw.Draw(texture_stick).rectangle((2,0,12,12),outline=(0,0,0,0),fill=(0,0,0,0))
 
-        img = Image.new("RGBA", (24,24), (38,92,255,0))
+        img = Image.new("RGBA", (24,24), bgcolor)
 
         #         W                N      ~90       E                   S        ~270
         angles = (330.,345.,0.,15.,30.,55.,95.,120.,150.,165.,180.,195.,210.,230.,265.,310.)
@@ -1209,7 +1230,7 @@ def generate_special_texture(blockID, data):
             swung=False
 
         # mask out the high bits to figure out the orientation 
-        img = Image.new("RGBA", (24,24), (38,92,255,0))
+        img = Image.new("RGBA", (24,24), bgcolor)
         if (data & 0x03) == 0: # northeast corner
             if not swung:
                 tex = transform_image_side(raw_door)
@@ -1248,7 +1269,7 @@ def generate_special_texture(blockID, data):
 
 
     if blockID == 65: # ladder
-        img = Image.new("RGBA", (24,24), (38,92,255,0))
+        img = Image.new("RGBA", (24,24), bgcolor)
         raw_texture = terrain_images[83]
         #print "ladder is facing: %d" % data
         if data == 5:
@@ -1273,7 +1294,7 @@ def generate_special_texture(blockID, data):
 
 
     if blockID in (27, 28, 66): # minetrack:
-        img = Image.new("RGBA", (24,24), (38,92,255,0))
+        img = Image.new("RGBA", (24,24), bgcolor)
         
         if blockID == 27: # powered rail
             if data & 0x8 == 0: # unpowered
@@ -1356,7 +1377,7 @@ def generate_special_texture(blockID, data):
                 texture.putpixel((x,y),(0,0,0,255))
         """
         
-        img = Image.new("RGBA", (24,24), (38,92,255,0))
+        img = Image.new("RGBA", (24,24), bgcolor)
 
         incrementx = 0
         if data == 2:  # east
@@ -1390,7 +1411,6 @@ def generate_special_texture(blockID, data):
         ImageDraw.Draw(fence_top).rectangle((0,0,15,5),outline=(0,0,0,0),fill=(0,0,0,0))
         ImageDraw.Draw(fence_top).rectangle((0,10,15,15),outline=(0,0,0,0),fill=(0,0,0,0))
 
-        ImageDraw.Draw(fence_side).rectangle((0,0,15,0),outline=(0,0,0,0),fill=(0,0,0,0))
         ImageDraw.Draw(fence_side).rectangle((0,0,5,15),outline=(0,0,0,0),fill=(0,0,0,0))
         ImageDraw.Draw(fence_side).rectangle((10,0,15,15),outline=(0,0,0,0),fill=(0,0,0,0))
 
@@ -1410,10 +1430,10 @@ def generate_special_texture(blockID, data):
         fence_other_side.putalpha(othersidealpha)
 
         # Compose the fence big stick
-        fence_big = Image.new("RGBA", (24,24), (38,92,255,0))
+        fence_big = Image.new("RGBA", (24,24), bgcolor)
         composite.alpha_over(fence_big,fence_side, (5,4),fence_side)
         composite.alpha_over(fence_big,fence_other_side, (7,4),fence_other_side)
-        composite.alpha_over(fence_big,fence_top, (0,1),fence_top)
+        composite.alpha_over(fence_big,fence_top, (0,0),fence_top)
         
         # Now render the small sticks.
         # Create needed images
@@ -1441,7 +1461,7 @@ def generate_special_texture(blockID, data):
         fence_small_side.putalpha(sidealpha)
 
        # Create img to compose the fence
-        img = Image.new("RGBA", (24,24), (38,92,255,0))
+        img = Image.new("RGBA", (24,24), bgcolor)
 
         # Position of fence small sticks in img.
         # These postitions are strange because the small sticks of the 
@@ -1491,7 +1511,7 @@ def generate_special_texture(blockID, data):
 
     if blockID == 90: # portal
         portaltexture = _load_image("portal.png")
-        img = Image.new("RGBA", (24,24), (38,92,255,0))
+        img = Image.new("RGBA", (24,24), bgcolor)
 
         side = transform_image_side(portaltexture)
         otherside = side.transpose(Image.FLIP_TOP_BOTTOM)
@@ -1520,7 +1540,7 @@ def generate_special_texture(blockID, data):
         otherside = ImageEnhance.Brightness(otherside).enhance(0.8)
         otherside.putalpha(othersidealpha)
         
-        img = Image.new("RGBA", (24,24), (38,92,255,0))
+        img = Image.new("RGBA", (24,24), bgcolor)
         
         composite.alpha_over(img, side, (1,6), side)
         composite.alpha_over(img, otherside, (11,7), otherside) # workaround, fixes a hole
@@ -1531,9 +1551,7 @@ def generate_special_texture(blockID, data):
 
 
     if blockID in (93, 94): # redstone repeaters (diodes), ON and OFF
-        # NOTE: this function uses the redstone torches generated above,
-        # this must run after the function of the torches.
-
+        # generate the diode
         top = terrain_images[131] if blockID == 93 else terrain_images[147]
         side = terrain_images[5]
         increment = 13
@@ -1551,12 +1569,22 @@ def generate_special_texture(blockID, data):
             top = top.rotate(90)
 
         img = _build_full_block( (top, increment), None, None, side, side)
+
+        # compose a "3d" redstone torch
+        t = terrain_images[115].copy() if blockID == 93 else terrain_images[99].copy()
+        torch = Image.new("RGBA", (24,24), bgcolor)
+        
+        t_crop = t.crop((2,2,14,14))
+        slice = t_crop.copy()
+        ImageDraw.Draw(slice).rectangle((6,0,12,12),outline=(0,0,0,0),fill=(0,0,0,0))
+        ImageDraw.Draw(slice).rectangle((0,0,4,12),outline=(0,0,0,0),fill=(0,0,0,0))
+        
+        composite.alpha_over(torch, slice, (6,4))
+        composite.alpha_over(torch, t_crop, (5,5))
+        composite.alpha_over(torch, t_crop, (6,5))
+        composite.alpha_over(torch, slice, (6,6))
         
         # paste redstone torches everywhere!
-        t = specialblockmap[(75,5)] if blockID == 93 else specialblockmap[(76,5)]
-        torch = t[0].copy()        # textures are stored as tuples (RGB,A)
-        torch.putalpha(t[1])
-        
         # the torch is too tall for the repeater, crop the bottom.
         ImageDraw.Draw(torch).rectangle((0,16,24,24),outline=(0,0,0,0),fill=(0,0,0,0))
         
@@ -1665,8 +1693,394 @@ def generate_special_texture(blockID, data):
         
         return generate_texture_tuple(img, blockID)
 
+    if blockID == 98: # normal, mossy and cracked stone brick
+        if data == 0: # normal
+            t = terrain_images[54]
+        elif data == 1: # mossy
+            t = terrain_images[100]
+        else: # cracked
+            t = terrain_images[101]
+
+        img = _build_full_block(t, None, None, t, t)
+
+        return generate_texture_tuple(img, blockID)
+
+    if blockID == 99 or blockID == 100: # huge brown and red mushroom
+        if blockID == 99: # brown
+            cap = terrain_images[126]
+        else: # red
+            cap = terrain_images[125]
+        stem = terrain_images[141]
+        porous = terrain_images[142]
+        
+        if data == 0: # fleshy piece
+            img = _build_full_block(porous, None, None, porous, porous)
+
+        if data == 1: # north-east corner
+            img = _build_full_block(cap, None, None, cap, porous)
+
+        if data == 2: # east side
+            img = _build_full_block(cap, None, None, porous, porous)
+
+        if data == 3: # south-east corner
+            img = _build_full_block(cap, None, None, porous, cap)
+
+        if data == 4: # north side
+            img = _build_full_block(cap, None, None, cap, porous)
+
+        if data == 5: # top piece
+            img = _build_full_block(cap, None, None, porous, porous)
+
+        if data == 6: # south side
+            img = _build_full_block(cap, None, None, cap, porous)
+
+        if data == 7: # north-west corner
+            img = _build_full_block(cap, None, None, cap, cap)
+
+        if data == 8: # west side
+            img = _build_full_block(cap, None, None, porous, cap)
+
+        if data == 9: # south-west corner
+            img = _build_full_block(cap, None, None, porous, cap)
+
+        if data == 10: # stem
+            img = _build_full_block(porous, None, None, stem, stem)
+
+        return generate_texture_tuple(img, blockID)
+
+    if blockID == 101 or blockID == 102: # iron bars and glass panes
+        if blockID == 101:
+            # iron bars
+            t = terrain_images[85]
+        else:
+            # glass panes
+            t = terrain_images[49]
+        left = t.copy()
+        right = t.copy()
+
+        # generate the four small pieces of the glass pane
+        ImageDraw.Draw(right).rectangle((0,0,7,15),outline=(0,0,0,0),fill=(0,0,0,0))
+        ImageDraw.Draw(left).rectangle((8,0,15,15),outline=(0,0,0,0),fill=(0,0,0,0))
+        
+        up_left = transform_image_side(left)
+        up_right = transform_image_side(right).transpose(Image.FLIP_TOP_BOTTOM)
+        dw_right = transform_image_side(right)
+        dw_left = transform_image_side(left).transpose(Image.FLIP_TOP_BOTTOM)
+
+        # Create img to compose the texture
+        img = Image.new("RGBA", (24,24), bgcolor)
+
+        # +x axis points top right direction
+        # +y axis points bottom right direction
+        # First compose things in the back of the image, 
+        # then things in the front.
+
+        if (data & 0b0001) == 1 or data == 0:
+            composite.alpha_over(img,up_left, (6,3),up_left)    # top left
+        if (data & 0b1000) == 8 or data == 0:
+            composite.alpha_over(img,up_right, (6,3),up_right)  # top right
+        if (data & 0b0010) == 2 or data == 0:
+            composite.alpha_over(img,dw_left, (6,3),dw_left)    # bottom left    
+        if (data & 0b0100) == 4 or data == 0:
+            composite.alpha_over(img,dw_right, (6,3),dw_right)  # bottom right
+
+        return generate_texture_tuple(img, blockID)
+    if blockID == 106: # vine
+        img = Image.new("RGBA", (24,24), bgcolor)
+        raw_texture = terrain_images[143]
+        # print "vine is facing: %d" % data
+        if data == 2:   # south
+            tex = transform_image_side(raw_texture)
+            composite.alpha_over(img, tex, (0,6), tex)
+            return generate_texture_tuple(img, blockID)
+        if data == 1:	# east
+            tex = transform_image_side(raw_texture).transpose(Image.FLIP_LEFT_RIGHT)
+            composite.alpha_over(img, tex, (12,6), tex)
+            return generate_texture_tuple(img, blockID)
+        if data == 4:	# west
+            tex = transform_image_side(raw_texture).transpose(Image.FLIP_LEFT_RIGHT)
+            composite.alpha_over(img, tex, (0,0), tex)
+            return generate_texture_tuple(img, blockID)
+        if data == 8:	# north
+            tex = transform_image_side(raw_texture)
+            composite.alpha_over(img, tex, (12,0), tex)
+            return generate_texture_tuple(img, blockID)
 
     return None
+
+def convert_data(blockID, data):
+    if blockID == 26: # bed
+        #Masked to not clobber block head/foot info
+        if _north == 'upper-left':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 1
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 2
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 0
+        elif _north == 'upper-right':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 2
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 0
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 1
+        elif _north == 'lower-right':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 0
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 1
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 2
+    if blockID in (29, 33, 34): # sticky piston, piston, piston extension
+        #Masked to not clobber block head/foot info
+        if _north == 'upper-left':
+            if (data & 0b0111) == 2: data = data & 0b1000 | 5
+            elif (data & 0b0111) == 3: data = data & 0b1000 | 4
+            elif (data & 0b0111) == 4: data = data & 0b1000 | 2
+            elif (data & 0b0111) == 5: data = data & 0b1000 | 3
+        elif _north == 'upper-right':
+            if (data & 0b0111) == 2: data = data & 0b1000 | 3
+            elif (data & 0b0111) == 3: data = data & 0b1000 | 2
+            elif (data & 0b0111) == 4: data = data & 0b1000 | 5
+            elif (data & 0b0111) == 5: data = data & 0b1000 | 4
+        elif _north == 'lower-right':
+            if (data & 0b0111) == 2: data = data & 0b1000 | 4
+            elif (data & 0b0111) == 3: data = data & 0b1000 | 5
+            elif (data & 0b0111) == 4: data = data & 0b1000 | 3
+            elif (data & 0b0111) == 5: data = data & 0b1000 | 2
+    if blockID in (27, 28, 66): # minetrack:
+        #Masked to not clobber powered rail on/off info
+        #Ascending and flat straight
+        if _north == 'upper-left':
+            if (data & 0b0111) == 0: data = data & 0b1000 | 1
+            elif (data & 0b0111) == 1: data = data & 0b1000 | 0
+            elif (data & 0b0111) == 2: data = data & 0b1000 | 5
+            elif (data & 0b0111) == 3: data = data & 0b1000 | 4
+            elif (data & 0b0111) == 4: data = data & 0b1000 | 2
+            elif (data & 0b0111) == 5: data = data & 0b1000 | 3
+        elif _north == 'upper-right':
+            if (data & 0b0111) == 2: data = data & 0b1000 | 3
+            elif (data & 0b0111) == 3: data = data & 0b1000 | 2
+            elif (data & 0b0111) == 4: data = data & 0b1000 | 5
+            elif (data & 0b0111) == 5: data = data & 0b1000 | 4
+        elif _north == 'lower-right':
+            if (data & 0b0111) == 0: data = data & 0b1000 | 1
+            elif (data & 0b0111) == 1: data = data & 0b1000 | 0
+            elif (data & 0b0111) == 2: data = data & 0b1000 | 4
+            elif (data & 0b0111) == 3: data = data & 0b1000 | 5
+            elif (data & 0b0111) == 4: data = data & 0b1000 | 3
+            elif (data & 0b0111) == 5: data = data & 0b1000 | 2
+    if blockID == 66: # normal minetrack only
+        #Corners
+        if _north == 'upper-left':
+            if data == 6: data = 7
+            elif data == 7: data = 8
+            elif data == 8: data = 6
+            elif data == 9: data = 9
+        elif _north == 'upper-right':
+            if data == 6: data = 8
+            elif data == 7: data = 9
+            elif data == 8: data = 6
+            elif data == 9: data = 7
+        elif _north == 'lower-right':
+            if data == 6: data = 9
+            elif data == 7: data = 6
+            elif data == 8: data = 8
+            elif data == 9: data = 7
+    if blockID in (50, 75, 76): # torch, off/on redstone torch
+        if _north == 'upper-left':
+            if data == 1: data = 3
+            elif data == 2: data = 4
+            elif data == 3: data = 2
+            elif data == 4: data = 1
+        elif _north == 'upper-right':
+            if data == 1: data = 2
+            elif data == 2: data = 1
+            elif data == 3: data = 4
+            elif data == 4: data = 3
+        elif _north == 'lower-right':
+            if data == 1: data = 4
+            elif data == 2: data = 3
+            elif data == 3: data = 1
+            elif data == 4: data = 2
+    if blockID in (53,67,108,109): # wooden and cobblestone stairs.
+        if _north == 'upper-left':
+            if data == 0: data = 2
+            elif data == 1: data = 3
+            elif data == 2: data = 1
+            elif data == 3: data = 0
+        elif _north == 'upper-right':
+            if data == 0: data = 1
+            elif data == 1: data = 0
+            elif data == 2: data = 3
+            elif data == 3: data = 2
+        elif _north == 'lower-right':
+            if data == 0: data = 3
+            elif data == 1: data = 2
+            elif data == 2: data = 0
+            elif data == 3: data = 1
+    if blockID in (61, 62, 23): # furnace and burning furnace
+        if _north == 'upper-left':
+            if data == 2: data = 5
+            elif data == 3: data = 4
+            elif data == 4: data = 2
+            elif data == 5: data = 3
+        elif _north == 'upper-right':
+            if data == 2: data = 3
+            elif data == 3: data = 2
+            elif data == 4: data = 5
+            elif data == 5: data = 4
+        elif _north == 'lower-right':
+            if data == 2: data = 4
+            elif data == 3: data = 5
+            elif data == 4: data = 3
+            elif data == 5: data = 2
+    if blockID == 63: # signposts
+        if _north == 'upper-left':
+            data = (data + 4) % 16
+        elif _north == 'upper-right':
+            data = (data + 8) % 16
+        elif _north == 'lower-right':
+            data = (data + 12) % 16
+    if blockID in (64,71): # wooden/iron door
+        #Masked to not clobber block top/bottom & swung info
+        if _north == 'upper-left':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 1
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 2
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 0
+        elif _north == 'upper-right':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 2
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 0
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 1
+        elif _north == 'lower-right':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 0
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 1
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 2
+    if blockID == 65: # ladder
+        if _north == 'upper-left':
+            if data == 2: data = 5
+            elif data == 3: data = 4
+            elif data == 4: data = 2
+            elif data == 5: data = 3
+        elif _north == 'upper-right':
+            if data == 2: data = 3
+            elif data == 3: data = 2
+            elif data == 4: data = 5
+            elif data == 5: data = 4
+        elif _north == 'lower-right':
+            if data == 2: data = 4
+            elif data == 3: data = 5
+            elif data == 4: data = 3
+            elif data == 5: data = 2
+    if blockID == 68: # wall sign
+        if _north == 'upper-left':
+            if data == 2: data = 5
+            elif data == 3: data = 4
+            elif data == 4: data = 2
+            elif data == 5: data = 3
+        elif _north == 'upper-right':
+            if data == 2: data = 3
+            elif data == 3: data = 2
+            elif data == 4: data = 5
+            elif data == 5: data = 4
+        elif _north == 'lower-right':
+            if data == 2: data = 4
+            elif data == 3: data = 5
+            elif data == 4: data = 3
+            elif data == 5: data = 2
+    if blockID in (86,91): # pumpkins, jack-o-lantern
+        if _north == 'upper-left':
+            if data == 0: data = 1
+            elif data == 1: data = 2
+            elif data == 2: data = 3
+            elif data == 3: data = 0
+        elif _north == 'upper-right':
+            if data == 0: data = 2
+            elif data == 1: data = 3
+            elif data == 2: data = 0
+            elif data == 3: data = 1
+        elif _north == 'lower-right':
+            if data == 0: data = 3
+            elif data == 1: data = 0
+            elif data == 2: data = 1
+            elif data == 3: data = 2
+    if blockID in (93, 94): # redstone repeaters, ON and OFF
+        #Masked to not clobber delay info
+        if _north == 'upper-left':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 1
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 2
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 0
+        elif _north == 'upper-right':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 2
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 0
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 1
+        elif _north == 'lower-right':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 0
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 1
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 2
+    if blockID == 96: # trapdoor
+        #Masked to not clobber opened/closed info
+        if _north == 'upper-left':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 2
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 0
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 1
+        elif _north == 'upper-right':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 1
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 0
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 2
+        elif _north == 'lower-right':
+            if (data & 0b0011) == 0: data = data & 0b1100 | 2
+            elif (data & 0b0011) == 1: data = data & 0b1100 | 3
+            elif (data & 0b0011) == 2: data = data & 0b1100 | 1
+            elif (data & 0b0011) == 3: data = data & 0b1100 | 0
+    if blockID == 99 or blockID == 100: # huge red and brown mushroom
+        if _north == 'upper-left':
+            if data == 1: data = 3
+            elif data == 2: data = 6
+            elif data == 3: data = 9
+            elif data == 4: data = 2
+            elif data == 6: data = 8
+            elif data == 7: data = 1
+            elif data == 8: data = 4
+            elif data == 9: data = 7
+        elif _north == 'upper-right':
+            if data == 1: data = 9
+            elif data == 2: data = 8
+            elif data == 3: data = 7
+            elif data == 4: data = 6
+            elif data == 6: data = 4
+            elif data == 7: data = 3
+            elif data == 8: data = 2
+            elif data == 9: data = 1
+        elif _north == 'lower-right':
+            if data == 1: data = 7
+            elif data == 2: data = 4
+            elif data == 3: data = 1
+            elif data == 4: data = 2
+            elif data == 6: data = 8
+            elif data == 7: data = 9
+            elif data == 8: data = 6
+            elif data == 9: data = 3
+    if blockID == 106: # vine
+        if _north == 'upper-left':
+            if data == 1: data = 2
+            elif data == 4: data = 8
+            elif data == 8: data = 1
+            elif data == 2: data = 4
+        elif _north == 'upper-right':
+            if data == 1: data = 4
+            elif data == 4: data = 1
+            elif data == 8: data = 2
+            elif data == 2: data = 8
+        elif _north == 'lower-right':
+            if data == 1: data = 8
+            elif data == 4: data = 2
+            elif data == 8: data = 4
+            elif data == 2: data = 1
+    return data
 
 def tintTexture(im, c):
     # apparently converting to grayscale drops the alpha channel?
@@ -1711,8 +2125,25 @@ def getBiomeData(worlddir, chunkX, chunkY):
     '''
 
     global currentBiomeFile, currentBiomeData
+    biomeX = chunkX // 32
+    biomeY = chunkY // 32
+    rots = 0
+    if _north == 'upper-left':
+        temp = biomeX
+        biomeX = biomeY
+        biomeY = -temp-1
+        rots = 3
+    elif _north == 'upper-right':
+        biomeX = -biomeX-1
+        biomeY = -biomeY-1
+        rots = 2
+    elif _north == 'lower-right':
+        temp = biomeX
+        biomeX = -biomeY-1
+        biomeY = temp
+        rots = 1
 
-    biomeFile = "b.%d.%d.biome" % (chunkX // 32, chunkY // 32)
+    biomeFile = "b.%d.%d.biome" % (biomeX, biomeY)
     if biomeFile == currentBiomeFile:
         return currentBiomeData
 
@@ -1722,7 +2153,9 @@ def getBiomeData(worlddir, chunkX, chunkY):
             # make sure the file size is correct
             if not len(rawdata) == 512 * 512 * 2:
                 raise Exception("Biome file %s is not valid." % (biomeFile,))
-            data = numpy.frombuffer(rawdata, dtype=numpy.dtype(">u2"))
+            data = numpy.reshape(numpy.rot90(numpy.reshape(
+                    numpy.frombuffer(rawdata, dtype=numpy.dtype(">u2")),
+                    (512,512)),rots), -1)
     except IOError:
         data = None
         pass # no biome data   
@@ -1740,8 +2173,9 @@ def getBiomeData(worlddir, chunkX, chunkY):
 
 special_blocks = set([ 2,  6,  9, 17, 18, 20, 26, 23, 27, 28, 29, 31, 33,
                       34, 35, 43, 44, 50, 51, 53, 54, 55, 58, 59, 61, 62,
-                      63, 64, 65, 66, 67, 68, 71, 75, 76, 85, 86, 90, 91,
-                      92, 93, 94, 96])
+                      63, 64, 65, 66, 67, 68, 71, 75, 76, 79, 85, 86, 90,
+                      91, 92, 93, 94, 96, 98, 99, 100, 101, 102, 106, 108,
+                      109])
 
 # this is a map of special blockIDs to a list of all 
 # possible values for ancillary data that it might have.
@@ -1760,14 +2194,14 @@ special_map[29] = (0,1,2,3,4,5,8,9,10,11,12,13) # sticky piston body, orientatio
 special_map[33] = (0,1,2,3,4,5,8,9,10,11,12,13) # normal piston body, orientation, pushed in/out
 special_map[34] = (0,1,2,3,4,5,8,9,10,11,12,13) # normal and sticky piston extension, orientation, sticky/normal
 special_map[35] = range(16) # wool, colored and white
-special_map[43] = range(4)  # stone, sandstone, wooden and cobblestone double-slab
-special_map[44] = range(4)  # stone, sandstone, wooden and cobblestone slab
+special_map[43] = range(6)  # stone, sandstone, wooden and cobblestone double-slab
+special_map[44] = range(6)  # stone, sandstone, wooden and cobblestone slab
 special_map[50] = (1,2,3,4,5) # torch, position in the block
 special_map[51] = range(16) # fire, position in the block (not implemented)
 special_map[53] = range(4)  # wooden stairs, orientation
 special_map[54] = range(12) # chests, orientation and type (single or double), uses pseudo data
 special_map[55] = range(128) # redstone wire, all the possible combinations, uses pseudo data
-special_map[58] = (0,)      # crafting table
+special_map[58] = (0,)      # crafting table, it has 2 different sides
 special_map[59] = range(8)  # crops, grow from 0 to 7
 special_map[61] = range(6)  # furnace, orientation
 special_map[62] = range(6)  # burning furnace, orientation
@@ -1780,14 +2214,23 @@ special_map[68] = (2,3,4,5) # wall sing, orientation
 special_map[71] = range(16) # iron door, open/close and orientation
 special_map[75] = (1,2,3,4,5) # off redstone torch, orientation
 special_map[76] = (1,2,3,4,5) # on redstone torch, orientation
+special_map[79] = range(32) # ice, used to only render the exterior surface, uses pseudo data
 special_map[85] = range(17) # fences, all the possible combination, uses pseudo data
 special_map[86] = range(5)  # pumpkin, orientation
 special_map[90] = (1,2,4,8) # portal, in 2 orientations, 4 cases, uses pseudo data
 special_map[91] = range(5)  # jack-o-lantern, orientation
-special_map[92] = range(6) # cake!
-special_map[93] = range(16) # OFF redstone repeater, orientation and delay (delay not implemented)
-special_map[94] = range(16) # ON redstone repeater, orientation and delay (delay not implemented)
+special_map[92] = range(6) # cake, eaten amount, (not implemented)
+special_map[93] = range(16) # OFF redstone repeater, orientation and delay
+special_map[94] = range(16) # ON redstone repeater, orientation and delay
 special_map[96] = range(8)  # trapdoor, open, closed, orientation
+special_map[98] = range(3)  # stone brick, normal, mossy and cracked
+special_map[99] = range(11) # huge brown mushroom, side, corner, etc, piece
+special_map[100] = range(11) # huge red mushroom, side, corner, etc, piece
+special_map[101]= range(16)  # iron bars, all the possible combination, uses pseudo data
+special_map[102]= range(16)  # glass panes, all the possible combination, uses pseudo data
+special_map[106] = (1,2,4,8) # vine, orientation
+special_map[108]= range(4)  # red stairs, orientation
+special_map[109]= range(4)  # stonebrick stairs, orientation
 
 # grass and leaves are graysacle in terrain.png
 # we treat them as special so we can manually tint them
@@ -1801,15 +2244,22 @@ special_map[18] = range(16) # leaves, birch, normal or pine leaves (not implemen
 special_map[31] = range(3) # tall grass, dead shrub, fern and tall grass itself
 
 # placeholders that are generated in generate()
+bgcolor = None
 terrain_images = None
 blockmap = None
 biome_grass_texture = None
 biome_tall_grass_texture = None
 biome_tall_fern_texture = None
 biome_leaf_texture = None
+biome_vine_texture = None
 specialblockmap = None
 
-def generate(path=None,texture_size=24):
+def generate(path=None,texture_size=24,bgc = (26,26,26,0),north_direction='lower-left'):
+    global _north
+    _north = north_direction
+    global _find_file_local_path
+    global bgcolor
+    bgcolor = bgc
     global _find_file_local_path, texture_dimensions
     _find_file_local_path = path
     texture_dimensions = (texture_size, texture_size)
@@ -1824,11 +2274,12 @@ def generate(path=None,texture_size=24):
     load_water()
     
     # generate biome (still grayscale) leaf, grass textures
-    global biome_grass_texture, biome_leaf_texture, biome_tall_grass_texture, biome_tall_fern_texture
+    global biome_grass_texture, biome_leaf_texture, biome_tall_grass_texture, biome_tall_fern_texture, biome_vine_texture
     biome_grass_texture = _build_block(terrain_images[0], terrain_images[38], 2)
     biome_leaf_texture = _build_block(terrain_images[52], terrain_images[52], 18)
     biome_tall_grass_texture = _build_block(terrain_images[39], terrain_images[39], 31)
     biome_tall_fern_texture = _build_block(terrain_images[56], terrain_images[56], 31)
+    biome_vine_texture = _build_block(terrain_images[143], terrain_images[143], 106)
     
     # generate the special blocks
     global specialblockmap, special_blocks
@@ -1843,6 +2294,7 @@ def generate(path=None,texture_size=24):
         biome_leaf_texture = biome_leaf_texture.resize(texture_dimensions, Image.ANTIALIAS)
         biome_tall_grass_texture = biome_tall_grass_texture.resize(texture_dimensions, Image.ANTIALIAS)
         biome_tall_fern_texture = biome_tall_fern_texture.resize(texture_dimensions, Image.ANTIALIAS)
+        biome_vine_texture = biome_vine_texture.resize(texture_dimensions, Image.ANTIALIAS)
 
         # rescale the normal block images
         for i in range(len(blockmap)):

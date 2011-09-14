@@ -73,18 +73,30 @@ def get_lvldata(world, filename, x, y, retries=2):
 def get_blockarray(level):
     """Takes the level struct as returned from get_lvldata, and returns the
     Block array, which just contains all the block ids"""
-    return numpy.frombuffer(level['Blocks'], dtype=numpy.uint8).reshape((16,16,128))
+    return level['Blocks']
 
-def get_blockarray_fromfile(filename):
+def get_blockarray_fromfile(filename, north_direction='lower-left'):
     """Same as get_blockarray except takes a filename. This is a shortcut"""
-    d =  nbt.load_from_region(filename, x, y)
+    d = nbt.load_from_region(filename, x, y, north_direction)
     level = d[1]['Level']
-    return get_blockarray(level)
+    chunk_data = level
+    rots = 0
+    if self.north_direction == 'upper-left':
+        rots = 1
+    elif self.north_direction == 'upper-right':
+        rots = 2
+    elif self.north_direction == 'lower-right':
+        rots = 3
+
+    chunk_data['Blocks'] = numpy.rot90(numpy.frombuffer(
+            level['Blocks'], dtype=numpy.uint8).reshape((16,16,128)),
+            rots)
+    return get_blockarray(chunk_data)
 
 def get_skylight_array(level):
     """Returns the skylight array. This is 4 bits per block, but it is
     expanded for you so you may index it normally."""
-    skylight = numpy.frombuffer(level['SkyLight'], dtype=numpy.uint8).reshape((16,16,64))
+    skylight = level['SkyLight']
     # this array is 2 blocks per byte, so expand it
     skylight_expanded = numpy.empty((16,16,128), dtype=numpy.uint8)
     # Even elements get the lower 4 bits
@@ -97,7 +109,7 @@ def get_blocklight_array(level):
     """Returns the blocklight array. This is 4 bits per block, but it
     is expanded for you so you may index it normally."""
     # expand just like get_skylight_array()
-    blocklight = numpy.frombuffer(level['BlockLight'], dtype=numpy.uint8).reshape((16,16,64))
+    blocklight = level['BlockLight']
     blocklight_expanded = numpy.empty((16,16,128), dtype=numpy.uint8)
     blocklight_expanded[:,:,::2] = blocklight & 0x0F
     blocklight_expanded[:,:,1::2] = (blocklight & 0xF0) >> 4
@@ -106,7 +118,7 @@ def get_blocklight_array(level):
 def get_blockdata_array(level):
     """Returns the ancillary data from the 'Data' byte array.  Data is packed
     in a similar manner to skylight data"""
-    return numpy.frombuffer(level['Data'], dtype=numpy.uint8).reshape((16,16,64))
+    return level['Data']
 
 def get_tileentity_data(level):
     """Returns the TileEntities TAG_List from chunk dat file"""
@@ -117,7 +129,8 @@ def get_tileentity_data(level):
 transparent_blocks = set([ 0,  6,  8,  9, 18, 20, 26, 27, 28, 29, 30, 31, 32, 33,
                           34, 37, 38, 39, 40, 44, 50, 51, 52, 53, 55, 59, 63, 64,
                           65, 66, 67, 68, 69, 70, 71, 72, 74, 75, 76, 77, 78, 79,
-                          81, 83, 85, 90, 92, 93, 94, 96])
+                          81, 83, 85, 90, 92, 93, 94, 96, 101, 102, 104, 105,
+                          106, 107, 108, 109])
 
 # This set holds block ids that are solid blocks
 solid_blocks = set([1, 2, 3, 4, 5, 7, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
@@ -128,8 +141,8 @@ solid_blocks = set([1, 2, 3, 4, 5, 7, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22
 fluid_blocks = set([8,9,10,11])
 
 # This set holds block ids that are not candidates for spawning mobs on
-# (glass, half blocks)
-nospawn_blocks = set([20,44])
+# (glass, half blocks, fluids)
+nospawn_blocks = set([20,44]).union(fluid_blocks)
 
 class ChunkCorrupt(Exception):
     pass
@@ -294,6 +307,13 @@ class ChunkRenderer(object):
         return self._up_right_skylight
     up_right_skylight = property(_load_up_right_skylight)
 
+    def _load_up_right_blocklight(self):
+        """Loads and returns lower-right blocklight array"""
+        if not hasattr(self, "_up_right_blocklight"):
+            self._load_up_right()
+        return self._up_right_blocklight
+    up_right_blocklight = property(_load_up_right_blocklight)
+
     def _load_up_left(self):
         """Loads and sets data from upper-left chunk"""
         chunk_path = self.world.get_region_path(self.chunkX, self.chunkY - 1)
@@ -320,6 +340,13 @@ class ChunkRenderer(object):
             self._load_up_left()
         return self._up_left_skylight
     up_left_skylight = property(_load_up_left_skylight)
+
+    def _load_up_left_blocklight(self):
+        """Loads and returns lower-left blocklight array"""
+        if not hasattr(self, "_up_left_blocklight"):
+            self._load_up_left()
+        return self._up_left_blocklight
+    up_left_blocklight = property(_load_up_left_blocklight)
 
     def chunk_render(self, img=None, xoff=0, yoff=0, cave=False):
         """Renders a chunk with the given parameters, and returns the image.
@@ -400,6 +427,10 @@ def generate_facemasks():
         right.putpixel((x,y), 255)
     for x,y in [(3,4), (7,2), (11,0)]:
         top.putpixel((x,y), 255)
+    
+    # special fix for chunk boundary stipple
+    for x,y in [(13,11), (17,9), (21,7)]:
+        right.putpixel((x,y), 0)
     
     return (top, left, right)
 facemasks = generate_facemasks()
