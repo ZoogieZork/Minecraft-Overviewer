@@ -103,7 +103,7 @@ def _load_image(filename):
     """Returns an image object"""
     fileobj = _find_file(filename)
     buffer = StringIO(fileobj.read())
-    return Image.open(buffer)
+    return Image.open(buffer).convert("RGBA")
 
 def _get_terrain_image():
     return _load_image("terrain.png")
@@ -271,8 +271,8 @@ def _build_block(top, side, blockID=None):
     otherside = ImageEnhance.Brightness(otherside).enhance(0.8)
     otherside.putalpha(othersidealpha)
 
-    ## special case for tall-grass, fern and dead shrub, 
-    if blockID in (31,32):
+    ## special case for tall-grass, fern, dead shrub, and pumpkin/melon stem
+    if blockID in (31,32,104,105):
         front = original_texture.resize((14,11), Image.ANTIALIAS)
         composite.alpha_over(img, front, (5,9))
         return img
@@ -532,8 +532,8 @@ def generate_special_texture(blockID, data):
             side_img = terrain_images[68]
         img = _build_block(terrain_images[0], side_img, 2)
         if not data & 0x10:
-            colored = tintTexture(biome_grass_texture, (115, 175, 71))
-            composite.alpha_over(img, colored, (0, 0), colored)
+            global biome_grass_texture
+            composite.alpha_over(img, biome_grass_texture, (0, 0), biome_grass_texture)
         return generate_texture_tuple(img, blockID)
 
 
@@ -615,7 +615,7 @@ def generate_special_texture(blockID, data):
 
 
     if blockID == 18: # leaves
-        t = tintTexture(terrain_images[52], (37, 118, 25))
+        t = terrain_images[52]
         img = _build_block(t, t, 18)
         return generate_texture_tuple(img, blockID)
 
@@ -670,11 +670,9 @@ def generate_special_texture(blockID, data):
         if data == 0: # dead shrub
             texture = terrain_images[55]
         elif data == 1: # tall grass
-            texture = terrain_images[39].copy()
-            texture = tintTexture(texture, (115, 175, 71))
+            texture = terrain_images[39]
         elif data == 2: # fern
-            texture = terrain_images[56].copy()
-            texture = tintTexture(texture, (115, 175, 71))
+            texture = terrain_images[56]
         
         img = _build_block(texture, texture, blockID)
         return generate_texture_tuple(img,31)
@@ -1785,6 +1783,29 @@ def generate_special_texture(blockID, data):
             composite.alpha_over(img,dw_right, (6,3),dw_right)  # bottom right
 
         return generate_texture_tuple(img, blockID)
+
+    if blockID == 104 or blockID == 105: # pumpkin and melon stems.
+        # the ancildata value indicates how much of the texture
+        # is shown.
+        if data & 48 == 0:
+            # not fully grown stem or no pumpkin/melon touching it,
+            # straight up stem
+            t = terrain_images[111].copy()
+            img = Image.new("RGBA", (16,16), bgcolor)
+            composite.alpha_over(img, t, (0, int(16 - 16*((data + 1)/8.))), t)
+            img = _build_block(img, img, blockID)
+            if data & 7 == 7:
+                # fully grown stem gets brown color!
+                # there is a conditional in rendermode-normal to not
+                # tint the data value 7
+                img = tintTexture(img, (211,169,116))
+            return generate_texture_tuple(img, blockID)
+        
+        else: # fully grown, and a pumpking/melon touching it,
+              # corner stem
+            pass
+            
+            
     if blockID == 106: # vine
         img = Image.new("RGBA", (24,24), bgcolor)
         raw_texture = terrain_images[143]
@@ -1805,6 +1826,64 @@ def generate_special_texture(blockID, data):
             tex = transform_image_side(raw_texture)
             composite.alpha_over(img, tex, (12,0), tex)
             return generate_texture_tuple(img, blockID)
+    
+    if blockID == 107:
+        # create the closed gate side
+        gate_side = terrain_images[4].copy()
+        gate_side_draw = ImageDraw.Draw(gate_side)
+        gate_side_draw.rectangle((7,0,15,0),outline=(0,0,0,0),fill=(0,0,0,0))
+        gate_side_draw.rectangle((7,4,9,6),outline=(0,0,0,0),fill=(0,0,0,0))
+        gate_side_draw.rectangle((7,10,15,16),outline=(0,0,0,0),fill=(0,0,0,0))
+        gate_side_draw.rectangle((0,12,15,16),outline=(0,0,0,0),fill=(0,0,0,0))
+        gate_side_draw.rectangle((0,0,4,15),outline=(0,0,0,0),fill=(0,0,0,0))
+        gate_side_draw.rectangle((14,0,15,15),outline=(0,0,0,0),fill=(0,0,0,0))
+        
+        # darken the sides slightly, as with the fences
+        sidealpha = gate_side.split()[3]
+        gate_side = ImageEnhance.Brightness(gate_side).enhance(0.9)
+        gate_side.putalpha(sidealpha)
+        
+        # create the other sides
+        mirror_gate_side = transform_image_side(gate_side.transpose(Image.FLIP_LEFT_RIGHT), blockID)
+        gate_side = transform_image_side(gate_side, blockID)
+        gate_other_side = gate_side.transpose(Image.FLIP_LEFT_RIGHT)
+        mirror_gate_other_side = mirror_gate_side.transpose(Image.FLIP_LEFT_RIGHT)
+        
+        # Create img to compose the fence gate
+        img = Image.new("RGBA", (24,24), bgcolor)
+        
+        if data & 0x4:
+            # opened
+            data = data & 0x3
+            if data == 0:
+                composite.alpha_over(img, gate_side, (2,8), gate_side)
+                composite.alpha_over(img, gate_side, (13,3), gate_side)
+            elif data == 1:
+                composite.alpha_over(img, gate_other_side, (-1,3), gate_other_side)
+                composite.alpha_over(img, gate_other_side, (10,8), gate_other_side)
+            elif data == 2:
+                composite.alpha_over(img, mirror_gate_side, (-1,7), mirror_gate_side)
+                composite.alpha_over(img, mirror_gate_side, (10,2), mirror_gate_side)
+            elif data == 3:
+                composite.alpha_over(img, mirror_gate_other_side, (2,1), mirror_gate_other_side)
+                composite.alpha_over(img, mirror_gate_other_side, (13,7), mirror_gate_other_side)
+        else:
+            # closed
+            
+            # positions for pasting the fence sides, as with fences
+            pos_top_left = (2,3)
+            pos_top_right = (10,3)
+            pos_bottom_right = (10,7)
+            pos_bottom_left = (2,7)
+            
+            if data == 0 or data == 2:
+                composite.alpha_over(img, gate_other_side, pos_top_right, gate_other_side)
+                composite.alpha_over(img, mirror_gate_other_side, pos_bottom_left, mirror_gate_other_side)
+            elif data == 1 or data == 3:
+                composite.alpha_over(img, gate_side, pos_top_left, gate_side)
+                composite.alpha_over(img, mirror_gate_side, pos_bottom_right, mirror_gate_side)
+        
+        return generate_texture_tuple(img, blockID)
 
     return None
 
@@ -2080,6 +2159,29 @@ def convert_data(blockID, data):
             elif data == 4: data = 2
             elif data == 8: data = 4
             elif data == 2: data = 1
+    if blockID == 107: # fence gates
+        opened = False
+        if data & 0x4:
+            data = data & 0x3
+            opened = True
+        if _north == 'upper-left':
+            if data == 0: data = 1
+            elif data == 1: data = 2
+            elif data == 2: data = 3
+            elif data == 3: data = 0
+        elif _north == 'upper-right':
+            if data == 0: data = 2
+            elif data == 1: data = 3
+            elif data == 2: data = 0
+            elif data == 3: data = 1
+        elif _north == 'lower-right':
+            if data == 0: data = 3
+            elif data == 1: data = 0
+            elif data == 2: data = 1
+            elif data == 3: data = 2
+        if opened:
+            data = data | 0x4
+            
     return data
 
 def tintTexture(im, c):
@@ -2174,23 +2276,30 @@ def getBiomeData(worlddir, chunkX, chunkY):
 special_blocks = set([ 2,  6,  9, 17, 18, 20, 26, 23, 27, 28, 29, 31, 33,
                       34, 35, 43, 44, 50, 51, 53, 54, 55, 58, 59, 61, 62,
                       63, 64, 65, 66, 67, 68, 71, 75, 76, 79, 85, 86, 90,
-                      91, 92, 93, 94, 96, 98, 99, 100, 101, 102, 106, 108,
-                      109])
+                      91, 92, 93, 94, 96, 98, 99, 100, 101, 102, 104, 105,
+                      106, 107, 108, 109])
 
 # this is a map of special blockIDs to a list of all 
 # possible values for ancillary data that it might have.
 
 special_map = {}
 
+# 0x10 means SNOW sides
+special_map[2] = range(11) + [0x10,]  # grass, grass has not ancildata but is
+                                      # used in the mod WildGrass, and this
+                                      # small fix shows the map as expected,
+                                      # and is harmless for normal maps
 special_map[6] = range(16)  # saplings: usual, spruce, birch and future ones (rendered as usual saplings)
 special_map[9] = range(32)  # water: spring,flowing, waterfall, and others (unknown) ancildata values, uses pseudo data
 special_map[17] = range(3)  # wood: normal, birch and pine
+special_map[18] = range(16) # leaves, birch, normal or pine leaves (not implemented)
 special_map[20] = range(32) # glass, used to only render the exterior surface, uses pseudo data
 special_map[26] = range(12) # bed, orientation
 special_map[23] = range(6)  # dispensers, orientation
 special_map[27] = range(14) # powered rail, orientation/slope and powered/unpowered
 special_map[28] = range(6) # detector rail, orientation/slope
 special_map[29] = (0,1,2,3,4,5,8,9,10,11,12,13) # sticky piston body, orientation, pushed in/out
+special_map[31] = range(3) # tall grass, dead shrub, fern and tall grass itself
 special_map[33] = (0,1,2,3,4,5,8,9,10,11,12,13) # normal piston body, orientation, pushed in/out
 special_map[34] = (0,1,2,3,4,5,8,9,10,11,12,13) # normal and sticky piston extension, orientation, sticky/normal
 special_map[35] = range(16) # wool, colored and white
@@ -2228,30 +2337,18 @@ special_map[99] = range(11) # huge brown mushroom, side, corner, etc, piece
 special_map[100] = range(11) # huge red mushroom, side, corner, etc, piece
 special_map[101]= range(16)  # iron bars, all the possible combination, uses pseudo data
 special_map[102]= range(16)  # glass panes, all the possible combination, uses pseudo data
+special_map[104] = range(8) # pumpkin stem, size of the stem
+special_map[105] = range(8) # melon stem, size of the stem
 special_map[106] = (1,2,4,8) # vine, orientation
+special_map[107] = range(8) # fence gates, orientation + open bit
 special_map[108]= range(4)  # red stairs, orientation
 special_map[109]= range(4)  # stonebrick stairs, orientation
-
-# grass and leaves are graysacle in terrain.png
-# we treat them as special so we can manually tint them
-# it is unknown how the specific tint (biomes) is calculated
-# also, 0x10 means SNOW sides
-special_map[2] = range(11) + [0x10,]  # grass, grass has not ancildata but is
-                                      # used in the mod WildGrass, and this
-                                      # small fix shows the map as expected,
-                                      # and is harmless for normal maps
-special_map[18] = range(16) # leaves, birch, normal or pine leaves (not implemented)
-special_map[31] = range(3) # tall grass, dead shrub, fern and tall grass itself
 
 # placeholders that are generated in generate()
 bgcolor = None
 terrain_images = None
 blockmap = None
 biome_grass_texture = None
-biome_tall_grass_texture = None
-biome_tall_fern_texture = None
-biome_leaf_texture = None
-biome_vine_texture = None
 specialblockmap = None
 
 def generate(path=None,texture_size=24,bgc = (26,26,26,0),north_direction='lower-left'):
@@ -2273,13 +2370,9 @@ def generate(path=None,texture_size=24,bgc = (26,26,26,0),north_direction='lower
     blockmap = _build_blockimages()
     load_water()
     
-    # generate biome (still grayscale) leaf, grass textures
-    global biome_grass_texture, biome_leaf_texture, biome_tall_grass_texture, biome_tall_fern_texture, biome_vine_texture
+    # generate biome grass mask
+    global biome_grass_texture
     biome_grass_texture = _build_block(terrain_images[0], terrain_images[38], 2)
-    biome_leaf_texture = _build_block(terrain_images[52], terrain_images[52], 18)
-    biome_tall_grass_texture = _build_block(terrain_images[39], terrain_images[39], 31)
-    biome_tall_fern_texture = _build_block(terrain_images[56], terrain_images[56], 31)
-    biome_vine_texture = _build_block(terrain_images[143], terrain_images[143], 106)
     
     # generate the special blocks
     global specialblockmap, special_blocks
@@ -2291,10 +2384,6 @@ def generate(path=None,texture_size=24,bgc = (26,26,26,0),north_direction='lower
     if texture_size != 24:
         # rescale biome textures.
         biome_grass_texture = biome_grass_texture.resize(texture_dimensions, Image.ANTIALIAS)
-        biome_leaf_texture = biome_leaf_texture.resize(texture_dimensions, Image.ANTIALIAS)
-        biome_tall_grass_texture = biome_tall_grass_texture.resize(texture_dimensions, Image.ANTIALIAS)
-        biome_tall_fern_texture = biome_tall_fern_texture.resize(texture_dimensions, Image.ANTIALIAS)
-        biome_vine_texture = biome_vine_texture.resize(texture_dimensions, Image.ANTIALIAS)
 
         # rescale the normal block images
         for i in range(len(blockmap)):

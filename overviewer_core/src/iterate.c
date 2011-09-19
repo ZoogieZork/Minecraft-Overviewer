@@ -183,7 +183,8 @@ generate_pseudo_data(RenderState *state, unsigned char ancilData) {
         data = (check_adjacent_blocks(state, x, y, z, state->block) ^ 0x0f) | data;
         return data;
     } else if (state->block == 85) { /* fences */
-        return check_adjacent_blocks(state, x, y, z, state->block);
+        /* check for fences AND fence gates */
+        return check_adjacent_blocks(state, x, y, z, state->block) | check_adjacent_blocks(state, x, y, z, 107);
 
     } else if (state->block == 55) { /* redstone */
         /* three addiotional bit are added, one for on/off state, and
@@ -283,7 +284,12 @@ generate_pseudo_data(RenderState *state, unsigned char ancilData) {
 
         return final_data;
 
-    /* fences, iron bars and glass panes */
+    /* portal, iron bars and glass panes
+     * Note: iron bars and glass panes "stick" to other blocks, but
+     * at the moment of writing this is not clear which ones stick and
+     * which others no, so for the moment stick only with himself.
+     * This is a TODO!
+     */
     } else if ((state->block == 90) || (state->block == 101) ||
                (state->block == 102)) {
         return check_adjacent_blocks(state, x, y, z, state->block);
