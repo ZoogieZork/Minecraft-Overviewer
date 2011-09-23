@@ -90,12 +90,13 @@ def _find_file(filename, mode="rb", verbose=False):
 
     for jarpath in jarpaths:
         if os.path.exists(jarpath):
-            try:
-                jar = zipfile.ZipFile(jarpath)
-                if verbose: logging.info("Found %s in '%s'", filename, jarpath)
-                return jar.open(filename)
-            except (KeyError, IOError):
-                pass
+            jar = zipfile.ZipFile(jarpath)
+            for jarfilename in [filename, 'misc/' + filename, 'environment/' + filename]:
+                try:
+                    if verbose: logging.info("Found %s in '%s'", jarfilename, jarpath)
+                    return jar.open(jarfilename)
+                except (KeyError, IOError), e:
+                    pass
 
     raise IOError("Could not find the file `{0}'. You can either place it in the same place as overviewer.py, use --textures-path, or install the Minecraft client.".format(filename))
 
@@ -616,6 +617,9 @@ def generate_special_texture(blockID, data):
 
     if blockID == 18: # leaves
         t = terrain_images[52]
+        if data == 1:
+            # pine!
+            t = terrain_images[132]
         img = _build_block(t, t, 18)
         return generate_texture_tuple(img, blockID)
 
@@ -1395,6 +1399,35 @@ def generate_special_texture(blockID, data):
         composite.alpha_over(img, sign2,(incrementx, 2),sign2)
         composite.alpha_over(img, sign, (0,3), sign)
 
+        return generate_texture_tuple(img, blockID)
+
+    if blockID == 70 or blockID == 72: # wooden and stone pressure plates
+        if blockID == 70: # stone
+            t = terrain_images[1].copy()
+        else: # wooden
+            t = terrain_images[4].copy()
+        
+        # cut out the outside border, pressure plates are smaller
+        # than a normal block
+        ImageDraw.Draw(t).rectangle((0,0,15,15),outline=(0,0,0,0))
+        
+        # create the textures and a darker version to make a 3d by 
+        # pasting them with an offstet of 1 pixel
+        img = Image.new("RGBA", (24,24), bgcolor)
+        
+        top = transform_image(t, blockID)
+        
+        alpha = top.split()[3]
+        topd = ImageEnhance.Brightness(top).enhance(0.8)
+        topd.putalpha(alpha)
+        
+        #show it 3d or 2d if unpressed or pressed
+        if data == 0:
+            composite.alpha_over(img,topd, (0,12),topd)
+            composite.alpha_over(img,top, (0,11),top)
+        elif data == 1:
+            composite.alpha_over(img,top, (0,12),top)
+        
         return generate_texture_tuple(img, blockID)
 
     if blockID == 85: # fences
@@ -2194,9 +2227,10 @@ currentBiomeFile = None
 currentBiomeData = None
 grasscolor = None
 foliagecolor = None
+watercolor = None
 
 def prepareBiomeData(worlddir):
-    global grasscolor, foliagecolor
+    global grasscolor, foliagecolor, watercolor
     
     # skip if the color files are already loaded
     if grasscolor and foliagecolor:
@@ -2209,8 +2243,14 @@ def prepareBiomeData(worlddir):
     # try to find the biome color images.  If _find_file can't locate them
     # then try looking in the EXTRACTEDBIOMES folder
     try:
-        grasscolor = list(Image.open(_find_file("grasscolor.png")).getdata())
-        foliagecolor = list(Image.open(_find_file("foliagecolor.png")).getdata())
+        grasscolor = list(_load_image("grasscolor.png").getdata())
+        foliagecolor = list(_load_image("foliagecolor.png").getdata())
+        # don't force the water color just yet
+        # since the biome extractor doesn't know about it
+        try:
+            watercolor = list(_load_image("watercolor.png").getdata())
+        except IOError:
+            pass
     except IOError:
         try:
             grasscolor = list(Image.open(os.path.join(biomeDir,"grasscolor.png")).getdata())
@@ -2219,6 +2259,7 @@ def prepareBiomeData(worlddir):
             # clear anything that managed to get set
             grasscolor = None
             foliagecolor = None
+            watercolor = None
 
 def getBiomeData(worlddir, chunkX, chunkY):
     '''Opens the worlddir and reads in the biome color information
@@ -2266,6 +2307,20 @@ def getBiomeData(worlddir, chunkX, chunkY):
     currentBiomeData = data
     return data
 
+lightcolor = None
+lightcolor_checked = False
+def loadLightColor():
+    global lightcolor, lightcolor_checked
+    
+    if not lightcolor_checked:
+        lightcolor_checked = True
+        try:
+            lightcolor = list(_load_image("light_normal.png").getdata())
+        except:
+            logging.warning("Light color image could not be found.")
+            lightcolor = None
+    return lightcolor
+
 # This set holds block ids that require special pre-computing.  These are typically
 # things that require ancillary data to render properly (i.e. ladder plus orientation)
 # A good source of information is:
@@ -2275,9 +2330,9 @@ def getBiomeData(worlddir, chunkX, chunkY):
 
 special_blocks = set([ 2,  6,  9, 17, 18, 20, 26, 23, 27, 28, 29, 31, 33,
                       34, 35, 43, 44, 50, 51, 53, 54, 55, 58, 59, 61, 62,
-                      63, 64, 65, 66, 67, 68, 71, 75, 76, 79, 85, 86, 90,
-                      91, 92, 93, 94, 96, 98, 99, 100, 101, 102, 104, 105,
-                      106, 107, 108, 109])
+                      63, 64, 65, 66, 67, 68, 70, 71, 72, 75, 76, 79, 85,
+                      86, 90, 91, 92, 93, 94, 96, 98, 99, 100, 101, 102,
+                      104, 105, 106, 107, 108, 109])
 
 # this is a map of special blockIDs to a list of all 
 # possible values for ancillary data that it might have.
@@ -2292,7 +2347,7 @@ special_map[2] = range(11) + [0x10,]  # grass, grass has not ancildata but is
 special_map[6] = range(16)  # saplings: usual, spruce, birch and future ones (rendered as usual saplings)
 special_map[9] = range(32)  # water: spring,flowing, waterfall, and others (unknown) ancildata values, uses pseudo data
 special_map[17] = range(3)  # wood: normal, birch and pine
-special_map[18] = range(16) # leaves, birch, normal or pine leaves (not implemented)
+special_map[18] = range(16) # leaves, birch, normal or pine leaves
 special_map[20] = range(32) # glass, used to only render the exterior surface, uses pseudo data
 special_map[26] = range(12) # bed, orientation
 special_map[23] = range(6)  # dispensers, orientation
@@ -2320,7 +2375,9 @@ special_map[65] = (2,3,4,5) # ladder, orientation
 special_map[66] = range(10) # minecrart tracks, orientation, slope
 special_map[67] = range(4)  # cobblestone stairs, orientation
 special_map[68] = (2,3,4,5) # wall sing, orientation
+special_map[70] = (0,1)     # stone pressure plate, non pressed and pressed
 special_map[71] = range(16) # iron door, open/close and orientation
+special_map[72] = (0,1)     # wooden pressure plate, non pressed and pressed
 special_map[75] = (1,2,3,4,5) # off redstone torch, orientation
 special_map[76] = (1,2,3,4,5) # on redstone torch, orientation
 special_map[79] = range(32) # ice, used to only render the exterior surface, uses pseudo data
