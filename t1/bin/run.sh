@@ -8,8 +8,13 @@ source "$OVERVIEWER_CFG"
 
 cd "$OVERVIEWER_ROOT"
 
-time nice -n 19 python overviewer.py \
-    -p 2 \
-    --settings=settings.py \
-    "$WORLD" \
-    "$WORLD_DIR"
+for world in "${WORLDS[@]}"; do
+    WORLD="$WORLD_REPO_ROOT/$world"
+    WORLD_DIR="$WORLDS_DIR/$world"
+
+    time nice -n 19 python overviewer.py \
+        -p 2 \
+        --settings=settings.py \
+        "$WORLD" \
+        "$WORLD_DIR"
+done

@@ -6,38 +6,48 @@ if [[ $OVERVIEWER_CFG = "" ]]; then
 fi
 source "$OVERVIEWER_CFG"
 
-cd "$WORK_DIR"
-
-WORLD_MTIME_FILENAME="$WORLD_DIR/world-mtime.js"
+WORLD_MTIME_FILENAME="$WORLDS_DIR/world-mtime.js"
 
 # Disable paging by git.
 export GIT_PAGER=cat
 
 echo "==> Updating world"
-if ( cd world ; git checkout session.lock ; git pull ); then
 
-    echo "==> Compacting repository"
-    echo -n "--> Before: "
-    du -h --max-depth=0 world/.git
-    echo "--> Compacting"
-    ( cd world ; git gc )
-    echo -n "--> After:  "
-    du -h --max-depth=0 world/.git
+# Previous runs of the biome extractor may leave session.lock
+# modified, preventing pull from working.
+for world in "${WORLDS[@]}"; do
+    cd "$WORLD_REPO_ROOT/$world"
+    git checkout session.lock || exit 1
+done
 
-	echo "==> Extracting biomes"
-	java -jar MinecraftBiomeExtractor.jar -nogui world
+cd "$WORLD_REPO_ROOT"
+if git pull; then
+
+    SNAPSHOT_TIME="$(git log -1 --format='%ad')"
+
+    #echo "==> Compacting repository"
+    #echo -n "--> Before: "
+    #du -h --max-depth=0 .git
+    #echo "--> Compacting"
+    #git gc
+    #echo -n "--> After:  "
+    #du -h --max-depth=0 .git
+
+    # Disabled for now.
+    #echo "==> Extracting biomes"
+    #java -jar MinecraftBiomeExtractor.jar -nogui world
 
 	echo "==> Rendering"
 	pushd "$OVERVIEWER_ROOT"
 	t1/bin/run.sh
 	popd
 
-	echo "==> Filtering markers"
-	pushd "$WORLD_DIR"
-	"$OVERVIEWER_ROOT/t1/bin/markers.rb"
-	popd
+    # Disabled for now.
+    #echo "==> Filtering markers"
+    #pushd "$WORLD_DIR"
+    #"$OVERVIEWER_ROOT/t1/bin/markers.rb"
+    #popd
 
-	SNAPSHOT_TIME="$(cd world ; git log -1 --format='%ad')"
 	echo "var worldSnapshotTs='$SNAPSHOT_TIME'" > \
 		"$WORLD_MTIME_FILENAME"
 else
@@ -46,4 +56,4 @@ else
 fi
 
 echo "==> Syncing to web directory"
-rsync -av --delete "$WORLD_DIR/" "$WWW_DIR/"
+rsync -av --delete "$WORLDS_DIR/" "$WWW_DIR/"
