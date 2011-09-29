@@ -25,13 +25,13 @@ if git pull; then
 
     SNAPSHOT_TIME="$(git log -1 --format='%ad')"
 
-    #echo "==> Compacting repository"
-    #echo -n "--> Before: "
-    #du -h --max-depth=0 .git
-    #echo "--> Compacting"
-    #git gc
-    #echo -n "--> After:  "
-    #du -h --max-depth=0 .git
+    echo "==> Compacting repository"
+    echo -n "--> Before: "
+    du -h --max-depth=0 .git
+    echo "--> Compacting"
+    git gc
+    echo -n "--> After:  "
+    du -h --max-depth=0 .git
 
     # Disabled for now.
     #echo "==> Extracting biomes"
